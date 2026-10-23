@@ -38,6 +38,8 @@ const btnWriteVault = document.getElementById("btn-write-vault");
 const selectedDirName = document.getElementById("selected-dir-name");
 const diffDisplay = document.getElementById("diff-display");
 const autoWriteToggle = document.getElementById("auto-write-toggle");
+const btnSyncAllLocal = document.getElementById("btn-sync-all-local");
+const syncAllStatus = document.getElementById("sync-all-status");
 
 // 啟動函式
 window.addEventListener("DOMContentLoaded", () => {
@@ -149,8 +151,26 @@ function renderContent(rawText) {
   // 處理 ==螢光==
   processed = processed.replace(/==(.*?)==/g, "<mark>$1</mark>");
 
+  // 產生 H2 回合錨點與快速導覽列
+  const rounds = [];
+  processed = processed.replace(/^## (User \d+.*?)$/gm, (match, title) => {
+    const slug = "round-" + title.replace(/[^a-zA-Z0-9]/g, "-").toLowerCase();
+    rounds.push({ title, slug });
+    return `## <span id="${slug}">${title}</span>`;
+  });
+
+  let tocHtml = "";
+  if (rounds.length > 0) {
+    // 列出最後 10 個回合快速跳轉按鈕
+    const recentRounds = rounds.slice(-10);
+    const buttons = recentRounds
+      .map((r) => `<a href="#${r.slug}" class="toc-tag">${r.title}</a>`)
+      .join(" ");
+    tocHtml = `<div class="toc-bar"><strong>📍 快速跳轉回合：</strong>${buttons}</div>`;
+  }
+
   // 渲染 HTML
-  markdownRender.innerHTML = md.render(processed);
+  markdownRender.innerHTML = tocHtml + md.render(processed);
   editorPreview.innerHTML = md.render(processed);
 }
 
@@ -261,12 +281,51 @@ function setupEventListeners() {
       selectedDirName.textContent = `已掛載本機目錄：${localDirHandle.name}`;
       selectedDirName.style.color = "#2b7a78";
       btnWriteVault.disabled = !latestCloudContent;
+      if (btnSyncAllLocal) btnSyncAllLocal.disabled = false;
     } catch (err) {
       if (err.name !== "AbortError") {
         alert("授權失敗：" + err.message);
       }
     }
   });
+
+  // 一鍵推送本機所有 Markdown 至雲端
+  if (btnSyncAllLocal) {
+    btnSyncAllLocal.addEventListener("click", async () => {
+      if (!localDirHandle) return alert("請先選擇本機資料夾！");
+      if (!supabaseClient) return alert("Supabase 尚未連線！");
+      if (!confirm("確定要將本機資料夾內的所有 .md 檔案推送到雲端 Supabase 嗎？")) return;
+
+      btnSyncAllLocal.disabled = true;
+      syncAllStatus.textContent = "全量同步中...";
+
+      try {
+        let count = 0;
+        for await (const entry of localDirHandle.values()) {
+          if (entry.kind === "file" && entry.name.endsWith(".md")) {
+            const file = await entry.getFile();
+            const text = await file.text();
+            await supabaseClient.from("green_umin_drafts").upsert({
+              id: entry.name,
+              content: text,
+              author: "本機同步",
+              updated_at: new Date().toISOString()
+            });
+            count++;
+          }
+        }
+        syncAllStatus.textContent = `成功同步 ${count} 個檔案至雲端！`;
+        alert(`已成功將本機 ${count} 個 Markdown 檔案同步至雲端 Supabase！`);
+        loadDocument(currentFile);
+      } catch (e) {
+        console.error("全量同步失敗：", e);
+        syncAllStatus.textContent = "同步失敗：" + e.message;
+        alert("全量同步失敗：" + e.message);
+      } finally {
+        btnSyncAllLocal.disabled = false;
+      }
+    });
+  }
 
   // 一鍵寫入本機 Vault
   btnWriteVault.addEventListener("click", async () => {
