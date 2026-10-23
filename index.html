@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>綠光與流求 Web 共筆</title>
+  <link rel="stylesheet" href="style.css">
+  <!-- Supabase JS Client -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <!-- Markdown-it -->
+  <script src="https://cdn.jsdelivr.net/npm/markdown-it@14.1.0/dist/markdown-it.min.js"></script>
+</head>
+<body>
+  <div id="app">
+    <!-- 頂部導覽列 -->
+    <header class="top-header">
+      <div class="header-left">
+        <h1 class="site-title">綠光與流求 Web 共筆</h1>
+        <span id="connection-badge" class="badge badge-disconnected">未連線</span>
+      </div>
+      <div class="header-right">
+        <button id="btn-toggle-admin" class="btn btn-secondary">管理端模式</button>
+      </div>
+    </header>
+
+    <div class="main-container">
+      <!-- 左側章節列表 -->
+      <aside class="sidebar">
+        <div class="sidebar-header">
+          <h2>章節與設定</h2>
+        </div>
+        <div class="sidebar-section">
+          <h3>主線章節（可編輯）</h3>
+          <ul id="chapter-list" class="file-list">
+            <li data-file="5.md" class="active">第 5 章 (5.md)</li>
+            <li data-file="4.md">第 4 章 (4.md)</li>
+            <li data-file="3.md">第 3 章 (3.md)</li>
+            <li data-file="2.md">第 2 章 (2.md)</li>
+            <li data-file="1.md">第 1 章 (1.md)</li>
+          </ul>
+        </div>
+        <div class="sidebar-section">
+          <h3>設定集（唯讀）</h3>
+          <ul id="setting-list" class="file-list">
+            <li data-file="CHARACTERS.md">角色表 (CHARACTERS.md)</li>
+            <li data-file="STATE.md">各國政體 (STATE.md)</li>
+            <li data-file="TIMELINE.md">大事年表 (TIMELINE.md)</li>
+            <li data-file="TECH.md">科技設定 (TECH.md)</li>
+            <li data-file="NATIONS.md">邦國列表 (NATIONS.md)</li>
+            <li data-file="SETTINGS.md">總體設定 (SETTINGS.md)</li>
+          </ul>
+        </div>
+      </aside>
+
+      <!-- 主要內容區 -->
+      <main class="content-area">
+        <!-- 狀態列與工具列 -->
+        <div class="toolbar">
+          <div class="toolbar-left">
+            <span id="current-filename" class="current-file">5.md</span>
+            <span id="draft-status" class="draft-status">無本機未存草稿</span>
+          </div>
+          <div class="toolbar-right">
+            <button id="btn-view-mode" class="btn btn-active">閱讀模式</button>
+            <button id="btn-edit-mode" class="btn">編輯模式</button>
+            <button id="btn-new-round" class="btn btn-primary">新增回合</button>
+          </div>
+        </div>
+
+        <!-- 閱讀畫面 -->
+        <section id="view-panel" class="panel">
+          <div id="markdown-render" class="markdown-body">
+            <p class="placeholder-text">章節載入中...</p>
+          </div>
+        </section>
+
+        <!-- 編輯畫面（分割左編輯右預覽） -->
+        <section id="edit-panel" class="panel panel-split" style="display: none;">
+          <div class="editor-pane">
+            <div class="pane-header">
+              <span>原始碼編輯</span>
+              <button id="btn-save-draft" class="btn btn-sm btn-primary">送出回合至雲端</button>
+            </div>
+            <textarea id="editor-textarea" placeholder="在此撰寫章節或新增回合..."></textarea>
+          </div>
+          <div class="preview-pane">
+            <div class="pane-header">即時預覽</div>
+            <div id="editor-preview" class="markdown-body"></div>
+          </div>
+        </section>
+
+        <!-- 管理端本地同步面板（可收合） -->
+        <section id="admin-panel" class="panel admin-box" style="display: none;">
+          <div class="admin-header">
+            <h3>本機 Vault 同步管理 (File System Access)</h3>
+            <button id="btn-close-admin" class="btn btn-sm">關閉面板</button>
+          </div>
+          <div class="admin-content">
+            <div class="admin-step">
+              <button id="btn-select-dir" class="btn btn-secondary">1. 選擇本機 Green & Umin 資料夾</button>
+              <span id="selected-dir-name" class="dir-status">尚未授權本機資料夾</span>
+            </div>
+            <div class="admin-diff-box">
+              <h4>雲端最新草稿與本機差異</h4>
+              <div id="diff-display" class="diff-view">尚無待比對之變更</div>
+            </div>
+            <div class="admin-actions">
+              <button id="btn-write-vault" class="btn btn-primary" disabled>2. 核准並一鍵寫入本機 Vault</button>
+              <label class="auto-write-label">
+                <input type="checkbox" id="auto-write-toggle"> 收到即時推播時自動寫入本機
+              </label>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
