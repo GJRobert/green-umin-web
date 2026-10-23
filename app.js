@@ -151,20 +151,27 @@ function renderContent(rawText) {
   // 處理 ==螢光==
   processed = processed.replace(/==(.*?)==/g, "<mark>$1</mark>");
 
-  // 產生 H2 回合錨點與快速導覽列
+  // 產生 H2 回合錨點與快速導覽列（相容：年份 User、年份 GM、User 序號、Turn 回合）
   const rounds = [];
-  processed = processed.replace(/^## (User \d+.*?)$/gm, (match, title) => {
-    const slug = "round-" + title.replace(/[^a-zA-Z0-9]/g, "-").toLowerCase();
-    rounds.push({ title, slug });
-    return `## <span id="${slug}">${title}</span>`;
+  processed = processed.replace(/^##\s+([^\n#]+)$/gm, (match, title) => {
+    const trimmed = title.trim();
+    const slug = "round-" + encodeURIComponent(trimmed.replace(/\s+/g, "-").toLowerCase());
+    rounds.push({ title: trimmed, slug });
+    return `## <span id="${slug}">${trimmed}</span>`;
   });
 
   let tocHtml = "";
   if (rounds.length > 0) {
-    // 列出最後 10 個回合快速跳轉按鈕
-    const recentRounds = rounds.slice(-10);
+    // 列出最後 15 個回合快速跳轉按鈕
+    const recentRounds = rounds.slice(-15);
     const buttons = recentRounds
-      .map((r) => `<a href="#${r.slug}" class="toc-tag">${r.title}</a>`)
+      .map((r) => {
+        let tagClass = "toc-tag";
+        if (r.title.includes("User")) tagClass += " toc-tag-user";
+        else if (r.title.includes("GM")) tagClass += " toc-tag-gm";
+        else if (r.title.includes("Turn")) tagClass += " toc-tag-turn";
+        return `<a href="#${r.slug}" class="${tagClass}">${r.title}</a>`;
+      })
       .join(" ");
     tocHtml = `<div class="toc-bar"><strong>📍 快速跳轉回合：</strong>${buttons}</div>`;
   }
@@ -246,17 +253,31 @@ function setupEventListeners() {
     }
   });
 
-  // 新增回合快捷按鈕
+  // 新增回合快捷按鈕（支援年份 User 與序號 User）
   btnNewRound.addEventListener("click", () => {
     btnEditMode.click();
     const currentVal = editorTextarea.value;
-    // 尋找最後一個 User 編號
-    const matches = [...currentVal.matchAll(/## User (\d+)/g)];
-    let nextNum = 1;
-    if (matches.length > 0) {
-      nextNum = parseInt(matches[matches.length - 1][1], 10) + 1;
+
+    // 優先檢查「年份 User / 年份 GM」格式（例如：## 1248 GM、## 1249 User）
+    const yearMatches = [...currentVal.matchAll(/##\s*(\d{4})\s*(User|GM)/gi)];
+    let newSection = "";
+    if (yearMatches.length > 0) {
+      const last = yearMatches[yearMatches.length - 1];
+      const lastYear = parseInt(last[1], 10);
+      const lastRole = last[2].toUpperCase();
+      // 若上一回合為 GM，新增下一年度 User；若上一回合為 User，新增下一年度 User
+      const nextYear = lastRole === "GM" ? lastYear + 1 : lastYear + 1;
+      newSection = `\n\n## ${nextYear} User\n\n`;
+    } else {
+      // 次選：舊版 User 序號格式（例如：## User 191）
+      const matches = [...currentVal.matchAll(/##\s*User\s*(\d+)/gi)];
+      let nextNum = 1;
+      if (matches.length > 0) {
+        nextNum = parseInt(matches[matches.length - 1][1], 10) + 1;
+      }
+      newSection = `\n\n## User ${nextNum}\n\n`;
     }
-    const newSection = `\n\n## User ${nextNum}\n\n`;
+
     editorTextarea.value = currentVal + newSection;
     editorTextarea.scrollTop = editorTextarea.scrollHeight;
     editorTextarea.focus();

@@ -305,6 +305,82 @@ body {
   padding: 0 4px;
 }
 
+/* 清單與巢狀縮排 (Lists & Nested Lists) */
+.markdown-body ul,
+.markdown-body ol {
+  padding-left: 2.2em !important;
+  margin-top: 0.4em !important;
+  margin-bottom: 0.8em !important;
+}
+
+.markdown-body ul {
+  list-style-type: disc !important;
+}
+
+.markdown-body ol {
+  list-style-type: decimal !important;
+}
+
+.markdown-body ul ul,
+.markdown-body ol ul {
+  list-style-type: circle !important;
+  padding-left: 1.8em !important;
+  margin-top: 0.25em !important;
+  margin-bottom: 0.25em !important;
+}
+
+.markdown-body ul ul ul,
+.markdown-body ol ul ul,
+.markdown-body ol ol ul,
+.markdown-body ul ol ul {
+  list-style-type: square !important;
+  padding-left: 1.8em !important;
+  margin-top: 0.25em !important;
+  margin-bottom: 0.25em !important;
+}
+
+.markdown-body li {
+  margin: 0.3em 0 !important;
+  line-height: 1.7 !important;
+}
+
+.markdown-body li > p {
+  margin-bottom: 0.4em;
+}
+
+/* 引用與表格 (Blockquotes & Tables) */
+.markdown-body blockquote {
+  border-left: 4px solid var(--accent-color);
+  padding: 8px 16px;
+  background-color: #f7fafc;
+  color: var(--text-muted);
+  margin: 1em 0;
+  border-radius: 0 4px 4px 0;
+}
+
+.markdown-body table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1.2em 0;
+  font-size: 0.92rem;
+}
+
+.markdown-body th,
+.markdown-body td {
+  border: 1px solid var(--border-color);
+  padding: 8px 12px;
+  text-align: left;
+}
+
+.markdown-body th {
+  background-color: #edf2f7;
+  font-weight: 600;
+}
+
+.markdown-body tr:nth-child(even) {
+  background-color: #f7fafc;
+}
+
 /* Callout 樣式 */
 .callout {
   border-left: 4px solid var(--primary-color);
@@ -392,4 +468,23 @@ body {
   background-color: var(--primary-color);
   color: #ffffff;
 }
+
+.toc-tag-user {
+  background-color: #e6fffa;
+  color: #234e52;
+  border-color: #81e6d9;
+}
+
+.toc-tag-gm {
+  background-color: #ebf8ff;
+  color: #2a4365;
+  border-color: #90cdf4;
+}
+
+.toc-tag-turn {
+  background-color: #fffaf0;
+  color: #7b341e;
+  border-color: #fbd38d;
+}
+
 
