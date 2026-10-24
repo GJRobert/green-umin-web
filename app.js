@@ -360,9 +360,10 @@ async function loadDocument(filename, options = {}) {
   currentFile = filename;
   currentFileDisplay.textContent = filename;
 
-  // 判斷是否為設定集（唯讀）
-  const isEditable = filename.endsWith(".md") && /^\d+\.md$/.test(filename);
-  btnNewRound.style.display = isEditable ? "inline-block" : "none";
+  // 判斷是否為主線章節或設定筆記（兩者皆支援編輯）
+  const isStoryChapter = filename.endsWith(".md") && /^\d+\.md$/.test(filename);
+  btnNewRound.style.display = "inline-block";
+  btnNewRound.textContent = isStoryChapter ? "✍️ 新增回合" : "✏️ 編輯筆記";
 
   draftStatusDisplay.textContent = "";
 
@@ -511,9 +512,44 @@ function setupEventListeners() {
     }
   });
 
-  // 輔助：根據 roundEditMode 初始化右上角輕量回合編輯區
+  // 輔助：根據 roundEditMode 初始化右上角輕量回合或設定筆記編輯區
   function setupRoundEditorByMode(forceMode = null) {
     const baseContent = latestCloudContent || "";
+    const isStoryChapter = currentFile.endsWith(".md") && /^\d+\.md$/.test(currentFile);
+
+    // 設定集 / 附錄筆記編輯模式
+    if (!isStoryChapter) {
+      roundEditMode = "note_edit";
+      if (newRoundTitle) {
+        newRoundTitle.textContent = `✏️ 編輯設定筆記（${currentFile}）`;
+      }
+      if (btnSwitchRoundMode) {
+        btnSwitchRoundMode.style.display = "none";
+      }
+      if (btnSubmitRound) {
+        btnSubmitRound.textContent = "送出修改至雲端";
+      }
+      if (newRoundTextarea) {
+        newRoundTextarea.placeholder = `在此編輯 ${currentFile} 內容...`;
+        newRoundTextarea.value = baseContent;
+      }
+      if (newRoundPreview && newRoundTextarea) {
+        newRoundPreview.innerHTML = md.render(newRoundTextarea.value);
+        newRoundTextarea.focus();
+        newRoundTextarea.selectionStart = 0;
+        newRoundTextarea.selectionEnd = 0;
+      }
+      return;
+    }
+
+    // 主線故事章節（回合模式）
+    if (btnSwitchRoundMode) {
+      btnSwitchRoundMode.style.display = "inline-block";
+    }
+    if (btnSubmitRound) {
+      btnSubmitRound.textContent = "送出回合至雲端";
+    }
+
     const latestRounds = extractLatestRounds(baseContent, 1);
     const lastRound = latestRounds[0];
 
@@ -577,7 +613,7 @@ function setupEventListeners() {
     }
   }
 
-  // 新增回合：全篇縮成左半，右半出現編輯區（上）與預覽區（下）；再按一次可收合
+  // 新增回合 / 編輯筆記：全篇縮成左半，右半出現編輯區；再按一次可收合
   btnNewRound.addEventListener("click", () => {
     if (newRoundSide.style.display === "flex") {
       closeNewRoundSide();
@@ -622,11 +658,17 @@ function setupEventListeners() {
   if (btnSubmitRound) {
     btnSubmitRound.addEventListener("click", async () => {
       const newRoundText = newRoundTextarea.value.trim();
-      if (!newRoundText) return alert("回合內容不可為空！");
+      if (!newRoundText) return alert("內容不可為空！");
       if (!supabaseClient) return alert("Supabase 尚未連線！");
 
       const authorName = getCurrentAuthor();
-      const modeDesc = roundEditMode === "append_current" ? "更新當前回合" : "附加全新回合";
+      let modeDesc = "附加全新回合";
+      if (roundEditMode === "note_edit") {
+        modeDesc = "更新整篇筆記";
+      } else if (roundEditMode === "append_current") {
+        modeDesc = "更新當前回合";
+      }
+
       if (!confirm(`確定要以「${authorName}」身分送出（${modeDesc}）至雲端嗎？`)) return;
 
       btnSubmitRound.disabled = true;
@@ -644,7 +686,9 @@ function setupEventListeners() {
         }
 
         let mergedContent = "";
-        if (roundEditMode === "append_current") {
+        if (roundEditMode === "note_edit") {
+          mergedContent = newRoundText;
+        } else if (roundEditMode === "append_current") {
           const latestRounds = extractLatestRounds(baseContent, 1);
           const lastRound = latestRounds[0];
           if (lastRound && lastRound.startIndex >= 0) {
@@ -669,7 +713,8 @@ function setupEventListeners() {
 
         if (error) throw error;
 
-        alert(`🎉 已以「${authorName}」身分成功送出至雲端！`);
+        const successDesc = roundEditMode === "note_edit" ? `成功更新《${currentFile}》至雲端！` : `成功送出至雲端！`;
+        alert(`🎉 已以「${authorName}」身分${successDesc}`);
         localStorage.removeItem("new_round_" + currentFile);
         localStorage.setItem("ack_cloud_" + currentFile, nowIso);
         markSeen(currentFile, mergedContent);
@@ -682,6 +727,7 @@ function setupEventListeners() {
 
         setTimeout(() => {
           viewPanel.scrollTop = viewPanel.scrollHeight;
+        }, 100);
         }, 100);
       } catch (err) {
         alert("送出失敗：" + err.message);
