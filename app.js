@@ -41,6 +41,7 @@ const fallbackDirInput = document.getElementById("fallback-dir-input");
 const btnWriteVault = document.getElementById("btn-write-vault");
 const btnCopyLatestRound = document.getElementById("btn-copy-latest-round");
 const btnDownloadCloudMd = document.getElementById("btn-download-cloud-md");
+const btnMarkLocalSynced = document.getElementById("btn-mark-local-synced");
 const selectedDirName = document.getElementById("selected-dir-name");
 const diffSummaryBar = document.getElementById("diff-summary-bar");
 const diffDisplay = document.getElementById("diff-display");
@@ -825,7 +826,19 @@ function setupEventListeners() {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
       markSeen(currentFile, latestCloudContent);
+      localStorage.setItem("local_synced_hash_" + currentFile, contentHash(latestCloudContent));
       dismissCloudAlert();
+      updateDiffView();
+    });
+  }
+
+  if (btnMarkLocalSynced) {
+    btnMarkLocalSynced.addEventListener("click", () => {
+      if (!latestCloudContent) return;
+      localStorage.setItem("local_synced_hash_" + currentFile, contentHash(latestCloudContent));
+      markSeen(currentFile, latestCloudContent);
+      dismissCloudAlert();
+      updateDiffView();
     });
   }
 
@@ -1137,6 +1150,19 @@ async function updateDiffView() {
       }
       diffDisplay.innerHTML = diffRes.html;
     }
+    return;
+  }
+
+  // 若使用者已在本機下載或標記同步（或當前雲端內容雜湊與標記一致）
+  const syncedHash = localStorage.getItem("local_synced_hash_" + currentFile);
+  const currentCloudHash = contentHash(latestCloudContent);
+  if (syncedHash && syncedHash === currentCloudHash) {
+    if (diffSummaryBar) {
+      diffSummaryBar.textContent = `✅ 此版本已下載／同步至本機 Vault（雲端與本機 0 差異）！`;
+    }
+    diffDisplay.innerHTML =
+      `<span class="diff-hunk-header">✅ 已確認本機與雲端同步（0 差異）｜最新回合：${escapeHtml(lastRound ? lastRound.heading : "")}</span>` +
+      (lastRound ? lastRound.fullText.split("\n").map((l) => `<span class="diff-line-ctx">  ${escapeHtml(l)}</span>`).join("") : "");
     return;
   }
 
