@@ -43,6 +43,8 @@ const syncAllStatus = document.getElementById("sync-all-status");
 
 // 新增回合與優化元素快取
 const newRoundPanel = document.getElementById("new-round-panel");
+const newRoundHistoryContent = document.getElementById("new-round-history-content");
+const btnScrollBottomHistory = document.getElementById("btn-scroll-bottom-history");
 const newRoundTextarea = document.getElementById("new-round-textarea");
 const newRoundPreview = document.getElementById("new-round-preview");
 const newRoundTitle = document.getElementById("new-round-title");
@@ -311,17 +313,18 @@ function setupEventListeners() {
 
     const baseContent = latestCloudContent || editorTextarea.value || "";
 
-    // 擷取上一回合 GM 背景
-    if (lastGmBox && lastGmContent) {
-      const gmMatches = [...baseContent.matchAll(/##\s*(\d{4}\s*GM[^\n]*)([\s\S]*?)(?=(##\s*\d{4}\s*(User|GM)|$))/gi)];
-      if (gmMatches.length > 0) {
-        const lastGm = gmMatches[gmMatches.length - 1];
-        lastGmTitle.textContent = "上一回合背景：" + lastGm[1].trim();
-        lastGmContent.innerHTML = md.render(lastGm[2].trim().substring(0, 1500) + (lastGm[2].trim().length > 1500 ? "..." : ""));
-        lastGmBox.style.display = "flex";
-      } else {
-        lastGmBox.style.display = "none";
-      }
+    // 在左半面板渲染前文歷史紀錄，並自動滾動至最底部（最新背景）
+    if (newRoundHistoryContent) {
+      let processedHistory = baseContent.replace(/\[\[(.*?)\]\]/g, (match, p1) => {
+        const parts = p1.split("|");
+        const label = parts[1] || parts[0];
+        return `<span class="wikilink" style="color: #2b7a78; font-weight: 500;">${label}</span>`;
+      });
+      processedHistory = processedHistory.replace(/==(.*?)==/g, "<mark>$1</mark>");
+      newRoundHistoryContent.innerHTML = md.render(processedHistory);
+      setTimeout(() => {
+        newRoundHistoryContent.scrollTop = newRoundHistoryContent.scrollHeight;
+      }, 50);
     }
 
     // 計算下一個 User 回合標題
@@ -385,6 +388,15 @@ function setupEventListeners() {
         lastGmContent.style.display = "none";
         btnToggleGmContext.textContent = "展開";
       }
+    });
+  }
+
+  if (btnScrollBottomHistory && newRoundHistoryContent) {
+    btnScrollBottomHistory.addEventListener("click", () => {
+      newRoundHistoryContent.scrollTo({
+        top: newRoundHistoryContent.scrollHeight,
+        behavior: "smooth"
+      });
     });
   }
 

@@ -97,28 +97,38 @@
           </div>
         </section>
 
-        <!-- 新增回合專屬輕量面板（極速打字、0 延遲） -->
-        <section id="new-round-panel" class="panel panel-split" style="display: none;">
-          <div class="editor-pane">
+        <!-- 新增回合專屬輕量面板（左半前文，右上編輯，右下預覽） -->
+        <section id="new-round-panel" class="panel new-round-layout" style="display: none;">
+          <!-- 左半：先前內容 -->
+          <div class="new-round-history-pane">
             <div class="pane-header">
-              <span id="new-round-title">✍️ 撰寫新回合（極速模式）</span>
-              <div class="pane-header-actions">
-                <button id="btn-cancel-round" class="btn btn-sm">返回閱讀</button>
-                <button id="btn-submit-round" class="btn btn-sm btn-primary">送出新回合</button>
-              </div>
+              <span>📖 前文背景與歷史紀錄（對照閱讀）</span>
+              <button id="btn-scroll-bottom-history" class="btn btn-sm">跳至最新背景</button>
             </div>
-            <div class="round-context-box" id="last-gm-box" style="display: none;">
-              <div class="round-context-header">
-                <span id="last-gm-title">上一回合背景 (GM)</span>
-                <button id="btn-toggle-gm-context" class="btn btn-sm">收合</button>
-              </div>
-              <div id="last-gm-content" class="round-context-body"></div>
-            </div>
-            <textarea id="new-round-textarea" placeholder="在此輸入新回合行動與對話（幾百字輕量輸入，打字極順暢）..."></textarea>
+            <div id="new-round-history-content" class="markdown-body history-content-area"></div>
           </div>
-          <div class="preview-pane">
-            <div class="pane-header">新回合即時預覽</div>
-            <div id="new-round-preview" class="markdown-body"></div>
+
+          <!-- 右半：右上編輯、右下預覽 -->
+          <div class="new-round-action-pane">
+            <!-- 右上：編輯區 -->
+            <div class="new-round-editor-box">
+              <div class="pane-header">
+                <span id="new-round-title">✍️ 撰寫新回合</span>
+                <div class="pane-header-actions">
+                  <button id="btn-cancel-round" class="btn btn-sm">返回閱讀</button>
+                  <button id="btn-submit-round" class="btn btn-sm btn-primary">送出新回合</button>
+                </div>
+              </div>
+              <textarea id="new-round-textarea" placeholder="在此輸入新回合行動與對話（幾百字輕量輸入，打字極順暢）..."></textarea>
+            </div>
+
+            <!-- 右下：預覽區 -->
+            <div class="new-round-preview-box">
+              <div class="pane-header">
+                <span>新回合即時預覽</span>
+              </div>
+              <div id="new-round-preview" class="markdown-body preview-content-area"></div>
+            </div>
           </div>
         </section>
 

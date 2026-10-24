@@ -261,6 +261,63 @@ body {
   gap: 10px;
 }
 
+/* 新增回合三分割佈局：左半前文，右上編輯，右下預覽 */
+.new-round-layout {
+  display: flex !important;
+  flex-direction: row !important;
+  padding: 0 !important;
+  height: 100%;
+  overflow: hidden;
+}
+
+.new-round-history-pane {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  border-right: 1px solid var(--border-color);
+  background-color: var(--surface-color);
+  overflow: hidden;
+}
+
+.history-content-area {
+  flex: 1;
+  padding: 20px;
+  overflow-y: auto;
+  line-height: 1.75;
+}
+
+.new-round-action-pane {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.new-round-editor-box {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  border-bottom: 1px solid var(--border-color);
+  overflow: hidden;
+  background-color: #fafbfc;
+}
+
+.new-round-preview-box {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background-color: var(--surface-color);
+}
+
+.preview-content-area {
+  flex: 1;
+  padding: 16px;
+  overflow-y: auto;
+}
+
 .preview-toggle-label {
   font-size: 0.8rem;
   color: var(--text-muted);
