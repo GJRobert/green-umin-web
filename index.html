@@ -19,6 +19,13 @@
         <span id="connection-badge" class="badge badge-disconnected">未連線</span>
       </div>
       <div class="header-right">
+        <label class="author-select-label" title="自動記憶於本機瀏覽器，用來區分是誰送出的編輯與推播通知">
+          👤 身分：
+          <select id="author-role-select" class="author-select">
+            <option value="義捷">義捷</option>
+            <option value="阿爸">阿爸 (管理端)</option>
+          </select>
+        </label>
         <button id="btn-toggle-admin" class="btn btn-secondary">⚙️ 管理端模式 <span id="admin-alert-dot" class="admin-alert-dot" style="display: none;">新稿!</span></button>
       </div>
     </header>
@@ -47,7 +54,8 @@
         <div class="sidebar-section">
           <h3>主線章節（可編輯）</h3>
           <ul id="chapter-list" class="file-list">
-            <li data-file="5.md" class="active">第 5 章 (5.md)</li>
+            <li data-file="6.md" class="active">第 6 章 (6.md)</li>
+            <li data-file="5.md">第 5 章 (5.md)</li>
             <li data-file="4.md">第 4 章 (4.md)</li>
             <li data-file="3.md">第 3 章 (3.md)</li>
             <li data-file="2.md">第 2 章 (2.md)</li>
@@ -77,14 +85,14 @@
         <!-- 狀態列與工具列 -->
         <div class="toolbar">
           <div class="toolbar-left">
-            <span id="current-filename" class="current-file">5.md</span>
+            <span id="current-filename" class="current-file">6.md</span>
             <span id="cloud-meta-status" class="cloud-meta-badge">☁️ 載入雲端資訊中...</span>
             <span id="draft-status" class="draft-status">無本機未存草稿</span>
           </div>
           <div class="toolbar-right">
             <button id="btn-view-mode" class="btn btn-active">閱讀模式</button>
-            <button id="btn-edit-mode" class="btn">編輯模式</button>
-            <button id="btn-new-round" class="btn btn-primary">新增回合</button>
+            <button id="btn-edit-mode" class="btn">全文編輯</button>
+            <button id="btn-new-round" class="btn btn-primary">✍️ 補充／新增回合</button>
           </div>
         </div>
 
@@ -131,11 +139,12 @@
               <div class="pane-header">
                 <span id="new-round-title">✍️ 撰寫新回合</span>
                 <div class="pane-header-actions">
+                  <button id="btn-switch-round-mode" class="btn btn-sm" title="切換「補充目前回合」或「開啟下一回合」">➕ 改開下一回合</button>
                   <button id="btn-cancel-round" class="btn btn-sm">返回閱讀</button>
-                  <button id="btn-submit-round" class="btn btn-sm btn-primary">送出新回合</button>
+                  <button id="btn-submit-round" class="btn btn-sm btn-primary">送出回合至雲端</button>
                 </div>
               </div>
-              <textarea id="new-round-textarea" placeholder="在此輸入新回合行動與對話（幾百字輕量輸入，打字極順暢）..."></textarea>
+              <textarea id="new-round-textarea" placeholder="在此輸入本回合行動與對話（幾百字輕量輸入，打字極順暢）..."></textarea>
             </div>
 
             <!-- 右下：預覽區 -->

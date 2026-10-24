@@ -3,7 +3,7 @@ const SUPABASE_URL = "https://qofxozylnbgkfhcxikdp.supabase.co";
 const SUPABASE_KEY = "sb_publishable_O8HGoBrik2nrccdap3IeRg_H6o5v7yj";
 
 let supabaseClient = null;
-let currentFile = "5.md";
+let currentFile = "6.md";
 let localDirHandle = null;
 let localFallbackFiles = new Map(); // 支援 Zen / Firefox 資料夾讀取比對
 let latestCloudContent = "";
@@ -11,6 +11,7 @@ let previousCloudContent = "";
 let latestCloudAuthor = "";
 let latestCloudUpdatedAt = "";
 let currentDiffMode = "smart"; // 'smart' | 'rounds' | 'tail'
+let roundEditMode = "append_current"; // 'append_current' (補充當前回合) | 'new_next' (開啟下一回合)
 let autoWriteLocal = false;
 
 // 初始化 Markdown-it
@@ -22,6 +23,7 @@ const md = window.markdownit({
 
 // DOM 元素快取
 const badge = document.getElementById("connection-badge");
+const authorRoleSelect = document.getElementById("author-role-select");
 const chapterList = document.getElementById("chapter-list");
 const settingList = document.getElementById("setting-list");
 const currentFileDisplay = document.getElementById("current-filename");
@@ -71,6 +73,7 @@ const btnScrollBottomHistory = document.getElementById("btn-scroll-bottom-histor
 const newRoundTextarea = document.getElementById("new-round-textarea");
 const newRoundPreview = document.getElementById("new-round-preview");
 const newRoundTitle = document.getElementById("new-round-title");
+const btnSwitchRoundMode = document.getElementById("btn-switch-round-mode");
 const btnCancelRound = document.getElementById("btn-cancel-round");
 const btnSubmitRound = document.getElementById("btn-submit-round");
 const lastGmBox = document.getElementById("last-gm-box");
@@ -85,12 +88,54 @@ let fullTextDraftTimer = null;
 let fullTextPreviewTimer = null;
 let newRoundDraftTimer = null;
 
+function getCurrentAuthor() {
+  return (authorRoleSelect && authorRoleSelect.value) || localStorage.getItem("green_umin_author_role") || "義捷";
+}
+
 // 啟動函式
-window.addEventListener("DOMContentLoaded", () => {
+window.addEventListener("DOMContentLoaded", async () => {
+  const savedRole = localStorage.getItem("green_umin_author_role");
+  if (authorRoleSelect && savedRole) {
+    authorRoleSelect.value = savedRole;
+  }
   initSupabase();
   setupEventListeners();
-  loadDocument(currentFile);
+  await refreshChapterListFromCloud(true);
 });
+
+// 從 Supabase 動態載入所有主線章節清單（例如新增 6.md, 7.md 時自動抓取並將最新章節排第一）
+async function refreshChapterListFromCloud(loadNewest = false) {
+  if (!supabaseClient) {
+    loadDocument(currentFile);
+    return;
+  }
+  try {
+    const { data } = await supabaseClient
+      .from("green_umin_drafts")
+      .select("id");
+    if (data && data.length > 0) {
+      const chapters = data
+        .map((r) => r.id)
+        .filter((id) => /^\d+\.md$/.test(id))
+        .sort((a, b) => parseInt(b, 10) - parseInt(a, 10));
+      if (chapters.length > 0 && chapterList) {
+        if (loadNewest) {
+          currentFile = chapters[0];
+        }
+        chapterList.innerHTML = chapters
+          .map((ch) => {
+            const num = parseInt(ch, 10);
+            const activeCls = ch === currentFile ? ' class="active"' : "";
+            return `<li data-file="${ch}"${activeCls}>第 ${num} 章 (${ch})</li>`;
+          })
+          .join("");
+      }
+    }
+  } catch (e) {
+    console.warn("動態讀取章節列表失敗：", e);
+  }
+  loadDocument(currentFile);
+}
 
 // 播放清脆雙音提示音 (Web Audio API，免外部音檔)
 function playNotificationSound() {
@@ -199,15 +244,22 @@ async function handleRealtimeEvent(payload) {
   const row = payload.new;
   if (!row) return;
 
-  // 若更新的是其他章節，也跳出橫幅提醒
+  // 若是新建立的主線章節（例如拆檔 6.md, 7.md），自動重新載入左側章節列表
+  if (/^\d+\.md$/.test(row.id) && chapterList && !chapterList.querySelector(`li[data-file="${row.id}"]`)) {
+    await refreshChapterListFromCloud(false);
+  }
+
+  // 若更新的是其他章節，且作者不是本機目前選定的身分，跳出橫幅提醒
   if (row.id !== currentFile) {
-    triggerCloudAlert({
-      filename: row.id,
-      author: row.author || "義捷",
-      updatedAt: row.updated_at || new Date().toISOString(),
-      isRealtime: true,
-      summaryText: "點擊左側章節可切換檢視"
-    });
+    if (row.author && row.author !== getCurrentAuthor()) {
+      triggerCloudAlert({
+        filename: row.id,
+        author: row.author,
+        updatedAt: row.updated_at || new Date().toISOString(),
+        isRealtime: true,
+        summaryText: "點擊左側章節可切換檢視"
+      });
+    }
     return;
   }
 
@@ -234,16 +286,18 @@ async function handleRealtimeEvent(payload) {
   await updateDiffView();
   btnWriteVault.disabled = !localDirHandle;
 
-  // 觸發醒目視覺與聲音通知
-  const latestRound = extractLatestRounds(latestCloudContent, 1)[0];
-  const roundHint = latestRound ? `最新回合：${latestRound.heading} (${diffSign} 字)` : `字數變化：${diffSign} 字`;
-  triggerCloudAlert({
-    filename: currentFile,
-    author: latestCloudAuthor,
-    updatedAt: latestCloudUpdatedAt,
-    isRealtime: true,
-    summaryText: roundHint
-  });
+  // 若是別人（非本機當前設定之身分）送出的更新，才觸發醒目視覺與聲音通知
+  if (latestCloudAuthor !== getCurrentAuthor()) {
+    const latestRound = extractLatestRounds(latestCloudContent, 1)[0];
+    const roundHint = latestRound ? `最新回合：${latestRound.heading} (${diffSign} 字)` : `字數變化：${diffSign} 字`;
+    triggerCloudAlert({
+      filename: currentFile,
+      author: latestCloudAuthor,
+      updatedAt: latestCloudUpdatedAt,
+      isRealtime: true,
+      summaryText: roundHint
+    });
+  }
 
   // 如果管理者開啟了「自動寫入」，且已授權本地目錄，直接落盤
   if (autoWriteLocal && localDirHandle) {
@@ -296,10 +350,15 @@ async function loadDocument(filename) {
         // 同步更新管理端 Diff 檢視器（確保隨時打開都能看到最新回合與檔尾差異）
         await updateDiffView();
 
-        // 檢查是否為尚未讀過的新雲端進度（例如義捷剛從別台電腦送出）
+        // 檢查是否為尚未讀過的新雲端進度（且作者與本機當前身分不同）
         const lastAck = localStorage.getItem("ack_cloud_" + filename);
         const latestRound = extractLatestRounds(latestCloudContent, 1)[0];
-        if (latestCloudUpdatedAt && lastAck !== latestCloudUpdatedAt && latestCloudAuthor !== "本機同步") {
+        if (
+          latestCloudUpdatedAt &&
+          lastAck !== latestCloudUpdatedAt &&
+          latestCloudAuthor !== getCurrentAuthor() &&
+          latestCloudAuthor !== "本機同步"
+        ) {
           triggerCloudAlert({
             filename,
             author: latestCloudAuthor,
@@ -321,10 +380,16 @@ async function loadDocument(filename) {
 
 // 渲染 Markdown
 function renderContent(rawText) {
-  // 處理簡易 wikilink [[text]]
+  // 處理簡易 wikilink [[text]]，若指向主線章節（如 [[創作/fiction/Green & Umin/6#1249 User]]）則提供點擊直接跳轉！
   let processed = rawText.replace(/\[\[(.*?)\]\]/g, (match, p1) => {
     const parts = p1.split("|");
-    const label = parts[1] || parts[0];
+    const target = parts[0].trim();
+    const label = (parts[1] || parts[0]).trim();
+    const chMatch = target.match(/(?:^|\/)(\d+)(?:#.*)?$/);
+    if (chMatch) {
+      const targetFile = `${chMatch[1]}.md`;
+      return `<a href="#" class="wikilink-jump" data-target-file="${targetFile}">🔗 ${label}</a>`;
+    }
     return `<span class="wikilink" style="color: #2b7a78; font-weight: 500;">${label}</span>`;
   });
 
@@ -363,6 +428,27 @@ function renderContent(rawText) {
 
 // 3. 事件監聽
 function setupEventListeners() {
+  // 頂部身分切換器（記憶於本機 localStorage）
+  if (authorRoleSelect) {
+    authorRoleSelect.addEventListener("change", (e) => {
+      localStorage.setItem("green_umin_author_role", e.target.value);
+    });
+  }
+
+  // 內文 wikilink 點擊跳轉章節（例如點 5.md 末尾的移駕 6#1249 User）
+  if (markdownRender) {
+    markdownRender.addEventListener("click", (e) => {
+      const link = e.target.closest(".wikilink-jump");
+      if (link && link.dataset.targetFile) {
+        e.preventDefault();
+        const targetFile = link.dataset.targetFile;
+        const targetLi = document.querySelector(`.file-list li[data-file="${targetFile}"]`);
+        if (targetLi) updateActiveFile(targetLi);
+        loadDocument(targetFile);
+      }
+    });
+  }
+
   // 邊欄選檔
   chapterList.addEventListener("click", (e) => {
     if (e.target.tagName === "LI") {
@@ -438,21 +524,26 @@ function setupEventListeners() {
     btnSaveDraft.textContent = "傳送中...";
 
     try {
+      const nowIso = new Date().toISOString();
+      const authorName = getCurrentAuthor();
       const { error } = await supabaseClient
         .from("green_umin_drafts")
         .upsert({
           id: currentFile,
           content: text,
-          author: "義捷",
-          updated_at: new Date().toISOString()
+          author: authorName,
+          updated_at: nowIso
         });
 
       if (error) throw error;
 
-      alert("已成功送出儲存至雲端！");
+      alert(`已以「${authorName}」身分成功送出儲存至雲端！`);
       draftStatusDisplay.textContent = "草稿已與雲端同步";
       localStorage.removeItem("draft_" + currentFile);
+      localStorage.setItem("ack_cloud_" + currentFile, nowIso);
       latestCloudContent = text;
+      latestCloudAuthor = authorName;
+      latestCloudUpdatedAt = nowIso;
       renderContent(text);
     } catch (err) {
       alert("送出失敗：" + err.message);
@@ -462,19 +553,46 @@ function setupEventListeners() {
     }
   });
 
-  // 新增回合快捷按鈕：開啟「輕量極速模式」（避免載入 50 萬字大檔，打字 0 延遲）
-  btnNewRound.addEventListener("click", () => {
-    viewPanel.style.display = "none";
-    editPanel.style.display = "none";
-    if (newRoundPanel) newRoundPanel.style.display = "flex";
-    btnViewMode.classList.remove("btn-active");
-    btnEditMode.classList.remove("btn-active");
-
+  // 輔助：根據 roundEditMode 初始化右上角輕量回合編輯區
+  function setupRoundEditorByMode(forceMode = null) {
     const baseContent = latestCloudContent || editorTextarea.value || "";
+    const latestRounds = extractLatestRounds(baseContent, 1);
+    const lastRound = latestRounds[0];
 
-    // 在左半面板渲染前文歷史紀錄，並自動滾動至最底部（最新背景）
+    // 判斷最後一個 H2 是否已經是 User 回合（若是，代表 GM 還沒回覆，預設應該是「補充當前回合」而非跳下一年度！）
+    const isLastRoundUser = lastRound && /User/i.test(lastRound.heading);
+
+    if (forceMode) {
+      roundEditMode = forceMode;
+    } else {
+      roundEditMode = isLastRoundUser ? "append_current" : "new_next";
+    }
+
+    // 計算若要開新回合時的標題
+    const yearMatches = [...baseContent.matchAll(/##\s*(\d{4})\s*(User|GM)/gi)];
+    let nextTargetHeading = "## User 1";
+    if (yearMatches.length > 0) {
+      const last = yearMatches[yearMatches.length - 1];
+      const lastYear = parseInt(last[1], 10);
+      const lastRole = last[2].toUpperCase();
+      // 若上一節是 GM（如 1248 GM），則新 User 回合是 1249 User；若上一節是 1249 User 而強制開下一回合，則是 1250 User
+      const nextYear = lastRole === "GM" ? lastYear + 1 : lastYear + 1;
+      nextTargetHeading = `## ${nextYear} User`;
+    } else {
+      const matches = [...baseContent.matchAll(/##\s*User\s*(\d+)/gi)];
+      if (matches.length > 0) {
+        const nextNum = parseInt(matches[matches.length - 1][1], 10) + 1;
+        nextTargetHeading = `## User ${nextNum}`;
+      }
+    }
+
+    // 在左半面板渲染前文歷史紀錄，並自動滾動至最底部
     if (newRoundHistoryContent) {
-      let processedHistory = baseContent.replace(/\[\[(.*?)\]\]/g, (match, p1) => {
+      const historySource =
+        roundEditMode === "append_current" && lastRound && lastRound.startIndex > 0
+          ? baseContent.slice(0, lastRound.startIndex).trimEnd()
+          : baseContent;
+      let processedHistory = (historySource || baseContent).replace(/\[\[(.*?)\]\]/g, (match, p1) => {
         const parts = p1.split("|");
         const label = parts[1] || parts[0];
         return `<span class="wikilink" style="color: #2b7a78; font-weight: 500;">${label}</span>`;
@@ -486,43 +604,55 @@ function setupEventListeners() {
       }, 50);
     }
 
-    // 計算下一個 User 回合標題
-    const yearMatches = [...baseContent.matchAll(/##\s*(\d{4})\s*(User|GM)/gi)];
-    let targetHeading = "## User 1";
-    if (yearMatches.length > 0) {
-      const last = yearMatches[yearMatches.length - 1];
-      const lastYear = parseInt(last[1], 10);
-      const lastRole = last[2].toUpperCase();
-      const nextYear = lastRole === "GM" ? lastYear + 1 : lastYear + 1;
-      targetHeading = `## ${nextYear} User`;
+    if (roundEditMode === "append_current" && lastRound) {
+      if (newRoundTitle) {
+        newRoundTitle.textContent = `✏️ 補充當前回合（${lastRound.heading}）`;
+      }
+      if (btnSwitchRoundMode) {
+        btnSwitchRoundMode.textContent = `➕ 改開下一回合 (${nextTargetHeading})`;
+      }
+      if (newRoundTextarea) {
+        newRoundTextarea.value = lastRound.fullText + "\n";
+      }
     } else {
-      const matches = [...baseContent.matchAll(/##\s*User\s*(\d+)/gi)];
-      if (matches.length > 0) {
-        const nextNum = parseInt(matches[matches.length - 1][1], 10) + 1;
-        targetHeading = `## User ${nextNum}`;
+      if (newRoundTitle) {
+        newRoundTitle.textContent = `➕ 開啟全新回合（${nextTargetHeading}）`;
+      }
+      if (btnSwitchRoundMode) {
+        btnSwitchRoundMode.textContent = lastRound
+          ? `✏️ 改為補充當前回合 (${lastRound.heading})`
+          : "✏️ 補充當前回合";
+      }
+      const savedRoundDraft = localStorage.getItem("new_round_" + currentFile);
+      if (newRoundTextarea) {
+        newRoundTextarea.value = savedRoundDraft || `${nextTargetHeading}\n\n`;
       }
     }
 
-    if (newRoundTitle) {
-      newRoundTitle.textContent = `✍️ 撰寫新回合（極速模式） - ${targetHeading}`;
-    }
-
-    // 檢查是否有本回合草稿
-    const savedRoundDraft = localStorage.getItem("new_round_" + currentFile);
-    if (newRoundTextarea) {
-      if (savedRoundDraft) {
-        newRoundTextarea.value = savedRoundDraft;
-      } else {
-        newRoundTextarea.value = `${targetHeading}\n\n`;
-      }
-      if (newRoundPreview) {
-        newRoundPreview.innerHTML = md.render(newRoundTextarea.value);
-      }
+    if (newRoundPreview && newRoundTextarea) {
+      newRoundPreview.innerHTML = md.render(newRoundTextarea.value);
       newRoundTextarea.focus();
       newRoundTextarea.selectionStart = newRoundTextarea.value.length;
       newRoundTextarea.selectionEnd = newRoundTextarea.value.length;
     }
+  }
+
+  // 新增／補充回合快捷按鈕：開啟「輕量極速三分割工作台」
+  btnNewRound.addEventListener("click", () => {
+    viewPanel.style.display = "none";
+    editPanel.style.display = "none";
+    if (newRoundPanel) newRoundPanel.style.display = "flex";
+    btnViewMode.classList.remove("btn-active");
+    btnEditMode.classList.remove("btn-active");
+    setupRoundEditorByMode(null);
   });
+
+  if (btnSwitchRoundMode) {
+    btnSwitchRoundMode.addEventListener("click", () => {
+      const nextMode = roundEditMode === "append_current" ? "new_next" : "append_current";
+      setupRoundEditorByMode(nextMode);
+    });
+  }
 
   // 新回合編輯打字事件
   if (newRoundTextarea) {
@@ -531,10 +661,12 @@ function setupEventListeners() {
       if (newRoundPreview) {
         newRoundPreview.innerHTML = md.render(text);
       }
-      clearTimeout(newRoundDraftTimer);
-      newRoundDraftTimer = setTimeout(() => {
-        localStorage.setItem("new_round_" + currentFile, text);
-      }, 400);
+      if (roundEditMode === "new_next") {
+        clearTimeout(newRoundDraftTimer);
+        newRoundDraftTimer = setTimeout(() => {
+          localStorage.setItem("new_round_" + currentFile, text);
+        }, 400);
+      }
     });
   }
 
@@ -570,10 +702,12 @@ function setupEventListeners() {
   if (btnSubmitRound) {
     btnSubmitRound.addEventListener("click", async () => {
       const newRoundText = newRoundTextarea.value.trim();
-      if (!newRoundText) return alert("新回合內容不可為空！");
+      if (!newRoundText) return alert("回合內容不可為空！");
       if (!supabaseClient) return alert("Supabase 尚未連線！");
 
-      if (!confirm("確定要送出此新回合至雲端嗎？")) return;
+      const authorName = getCurrentAuthor();
+      const modeDesc = roundEditMode === "append_current" ? "更新當前回合" : "附加全新回合";
+      if (!confirm(`確定要以「${authorName}」身分送出（${modeDesc}）至雲端嗎？`)) return;
 
       btnSubmitRound.disabled = true;
       btnSubmitRound.textContent = "傳送中...";
@@ -589,22 +723,38 @@ function setupEventListeners() {
           baseContent = data && data.content ? data.content : "";
         }
 
-        const mergedContent = baseContent.trim() + "\n\n" + newRoundText + "\n";
+        let mergedContent = "";
+        if (roundEditMode === "append_current") {
+          const latestRounds = extractLatestRounds(baseContent, 1);
+          const lastRound = latestRounds[0];
+          if (lastRound && lastRound.startIndex >= 0) {
+            const prefix = baseContent.slice(0, lastRound.startIndex).trimEnd();
+            mergedContent = prefix ? prefix + "\n\n" + newRoundText + "\n" : newRoundText + "\n";
+          } else {
+            mergedContent = newRoundText + "\n";
+          }
+        } else {
+          mergedContent = baseContent.trim() + "\n\n" + newRoundText + "\n";
+        }
 
+        const nowIso = new Date().toISOString();
         const { error } = await supabaseClient
           .from("green_umin_drafts")
           .upsert({
             id: currentFile,
             content: mergedContent,
-            author: "義捷",
-            updated_at: new Date().toISOString()
+            author: authorName,
+            updated_at: nowIso
           });
 
         if (error) throw error;
 
-        alert("🎉 新回合已成功送出至雲端！");
+        alert(`🎉 已以「${authorName}」身分成功送出至雲端！`);
         localStorage.removeItem("new_round_" + currentFile);
+        localStorage.setItem("ack_cloud_" + currentFile, nowIso);
         latestCloudContent = mergedContent;
+        latestCloudAuthor = authorName;
+        latestCloudUpdatedAt = nowIso;
         editorTextarea.value = mergedContent;
         renderContent(mergedContent);
 
@@ -619,7 +769,7 @@ function setupEventListeners() {
         alert("送出失敗：" + err.message);
       } finally {
         btnSubmitRound.disabled = false;
-        btnSubmitRound.textContent = "送出新回合";
+        btnSubmitRound.textContent = "送出回合至雲端";
       }
     });
   }
