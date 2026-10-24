@@ -19,9 +19,24 @@
         <span id="connection-badge" class="badge badge-disconnected">未連線</span>
       </div>
       <div class="header-right">
-        <button id="btn-toggle-admin" class="btn btn-secondary">管理端模式</button>
+        <button id="btn-toggle-admin" class="btn btn-secondary">⚙️ 管理端模式 <span id="admin-alert-dot" class="admin-alert-dot" style="display: none;">新稿!</span></button>
       </div>
     </header>
+
+    <!-- 雲端新稿醒目警示橫幅 -->
+    <div id="cloud-alert-banner" class="cloud-alert-banner" style="display: none;">
+      <div class="cloud-alert-text">
+        <span class="pulse-dot"></span>
+        <strong id="cloud-alert-title">🔔 雲端最新進度通知</strong>
+        <span id="cloud-alert-detail"></span>
+      </div>
+      <div class="cloud-alert-actions">
+        <button id="btn-alert-view-diff" class="btn btn-sm btn-alert-action">🔍 檢視最新編輯 (Diff)</button>
+        <button id="btn-alert-jump-bottom" class="btn btn-sm btn-alert-action">📖 跳至最新回合</button>
+        <button id="btn-alert-copy-latest" class="btn btn-sm btn-alert-action">📋 複製最新回合</button>
+        <button id="btn-alert-dismiss" class="btn btn-sm btn-alert-dismiss">✓ 標記已讀</button>
+      </div>
+    </div>
 
     <div class="main-container">
       <!-- 左側章節列表 -->
@@ -63,6 +78,7 @@
         <div class="toolbar">
           <div class="toolbar-left">
             <span id="current-filename" class="current-file">5.md</span>
+            <span id="cloud-meta-status" class="cloud-meta-badge">☁️ 載入雲端資訊中...</span>
             <span id="draft-status" class="draft-status">無本機未存草稿</span>
           </div>
           <div class="toolbar-right">
@@ -135,24 +151,35 @@
         <!-- 管理端本地同步面板（可收合） -->
         <section id="admin-panel" class="panel admin-box" style="display: none;">
           <div class="admin-header">
-            <h3>本機 Vault 同步管理 (File System Access)</h3>
+            <h3>⚙️ 本機 Vault 同步與差異檢視台</h3>
             <button id="btn-close-admin" class="btn btn-sm">關閉面板</button>
           </div>
           <div class="admin-content">
             <div class="admin-step">
               <button id="btn-select-dir" class="btn btn-secondary">1. 選擇本機 Green & Umin 資料夾</button>
-              <span id="selected-dir-name" class="dir-status">尚未授權本機資料夾</span>
+              <input type="file" id="fallback-dir-input" webkitdirectory directory multiple style="display: none;">
+              <span id="selected-dir-name" class="dir-status">尚未載入本機資料夾（載入後可與雲端進行 100% 精確比對）</span>
             </div>
             <div class="admin-step">
               <button id="btn-sync-all-local" class="btn btn-secondary" disabled>將本機所有章節推送到雲端 (全量種子更新)</button>
               <span id="sync-all-status" class="dir-status"></span>
             </div>
             <div class="admin-diff-box">
-              <h4>雲端最新草稿與本機差異</h4>
+              <div class="admin-diff-header">
+                <h4>🔍 雲端最新編輯與差異檢視（直擊最新回合與檔尾）</h4>
+                <div class="diff-mode-tabs">
+                  <button id="btn-diff-mode-smart" class="btn btn-sm btn-active">✨ 最新變更比對 (Diff)</button>
+                  <button id="btn-diff-mode-rounds" class="btn btn-sm">📌 最新 2 回合全文</button>
+                  <button id="btn-diff-mode-tail" class="btn btn-sm">📜 檔案末尾 2000 字</button>
+                </div>
+              </div>
+              <div id="diff-summary-bar" class="diff-summary-bar">正在分析雲端最新內容...</div>
               <div id="diff-display" class="diff-view">尚無待比對之變更</div>
             </div>
             <div class="admin-actions">
-              <button id="btn-write-vault" class="btn btn-primary" disabled>2. 核准並一鍵寫入本機 Vault</button>
+              <button id="btn-write-vault" class="btn btn-primary" disabled>2. 核准並一鍵寫入本機 Vault (Chrome/Edge)</button>
+              <button id="btn-copy-latest-round" class="btn btn-secondary">📋 一鍵複製最新回合文字</button>
+              <button id="btn-download-cloud-md" class="btn btn-secondary">💾 下載最新 .md 檔</button>
               <label class="auto-write-label">
                 <input type="checkbox" id="auto-write-toggle"> 收到即時推播時自動寫入本機
               </label>

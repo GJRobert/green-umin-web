@@ -498,20 +498,24 @@ body {
 /* 管理端面板 */
 .admin-box {
   background-color: #fffaf0;
-  border-top: 2px solid #dd6b20;
+  border-top: 3px solid #dd6b20;
+  flex: none !important;
+  max-height: 65vh;
+  overflow-y: auto;
+  box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.08);
 }
 
 .admin-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 16px;
+  margin-bottom: 12px;
 }
 
 .admin-content {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
 }
 
 .dir-status {
@@ -520,22 +524,208 @@ body {
   color: var(--text-muted);
 }
 
+.admin-diff-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.diff-mode-tabs {
+  display: flex;
+  gap: 6px;
+}
+
+.diff-summary-bar {
+  background-color: #feebc8;
+  color: #7b341e;
+  padding: 6px 12px;
+  border-radius: 6px 6px 0 0;
+  border: 1px solid #fbd38d;
+  border-bottom: none;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
 .diff-view {
   background-color: #ffffff;
   border: 1px solid var(--border-color);
-  padding: 12px;
-  border-radius: 6px;
-  font-family: monospace;
-  font-size: 0.85rem;
-  max-height: 250px;
+  padding: 14px;
+  border-radius: 0 0 6px 6px;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 0.88rem;
+  line-height: 1.55;
+  max-height: 360px;
   overflow-y: auto;
   white-space: pre-wrap;
 }
 
+.diff-line-add {
+  background-color: #e6fffa;
+  color: #1d4044;
+  border-left: 4px solid #38b2ac;
+  padding: 2px 8px;
+  margin: 1px 0;
+  display: block;
+}
+
+.diff-line-del {
+  background-color: #fff5f5;
+  color: #742a2a;
+  border-left: 4px solid #f56565;
+  padding: 2px 8px;
+  margin: 1px 0;
+  text-decoration: line-through;
+  display: block;
+}
+
+.diff-line-ctx {
+  color: #718096;
+  padding: 1px 8px;
+  display: block;
+}
+
+.diff-hunk-header {
+  background-color: #ebf8ff;
+  color: #2b6cb0;
+  font-weight: 600;
+  padding: 4px 10px;
+  margin: 8px 0 4px 0;
+  border-radius: 4px;
+  display: block;
+}
+
+.admin-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
 .auto-write-label {
   font-size: 0.85rem;
-  margin-left: 16px;
+  margin-left: 8px;
   cursor: pointer;
+}
+
+/* 雲端新稿醒目警示橫幅與狀態徽章 */
+.cloud-alert-banner {
+  background: linear-gradient(90deg, #dd6b20 0%, #c05621 100%);
+  color: #ffffff;
+  padding: 10px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  box-shadow: 0 2px 10px rgba(221, 107, 32, 0.35);
+  z-index: 20;
+  animation: slideDownAlert 0.25s ease-out;
+}
+
+@keyframes slideDownAlert {
+  from {
+    transform: translateY(-100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.cloud-alert-text {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.95rem;
+}
+
+.pulse-dot {
+  width: 10px;
+  height: 10px;
+  background-color: #fbd38d;
+  border-radius: 50%;
+  display: inline-block;
+  box-shadow: 0 0 0 rgba(251, 211, 141, 0.7);
+  animation: pulseDot 1.5s infinite;
+}
+
+@keyframes pulseDot {
+  0% {
+    box-shadow: 0 0 0 0 rgba(251, 211, 141, 0.8);
+  }
+  70% {
+    box-shadow: 0 0 0 10px rgba(251, 211, 141, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(251, 211, 141, 0);
+  }
+}
+
+.cloud-alert-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn-alert-action {
+  background-color: #ffffff !important;
+  color: #c05621 !important;
+  border: none !important;
+  font-weight: 600 !important;
+}
+
+.btn-alert-action:hover {
+  background-color: #fffaf0 !important;
+}
+
+.btn-alert-dismiss {
+  background-color: rgba(255, 255, 255, 0.2) !important;
+  color: #ffffff !important;
+  border: 1px solid rgba(255, 255, 255, 0.4) !important;
+}
+
+.btn-alert-dismiss:hover {
+  background-color: rgba(255, 255, 255, 0.35) !important;
+}
+
+.admin-alert-dot {
+  background-color: #e53e3e;
+  color: #ffffff;
+  font-size: 0.72rem;
+  padding: 2px 6px;
+  border-radius: 10px;
+  margin-left: 6px;
+  font-weight: 700;
+  animation: pulseDot 1.5s infinite;
+}
+
+.btn-admin-has-alert {
+  border-color: #dd6b20 !important;
+  background-color: #fffaf0 !important;
+  color: #c05621 !important;
+  font-weight: 600 !important;
+}
+
+.cloud-meta-badge {
+  font-size: 0.82rem;
+  background-color: #ebf8ff;
+  color: #2b6cb0;
+  border: 1px solid #bee3f8;
+  padding: 3px 10px;
+  border-radius: 12px;
+  margin-left: 10px;
+  font-weight: 500;
+}
+
+.cloud-meta-badge.meta-new {
+  background-color: #fffaf0;
+  color: #c05621;
+  border-color: #fbd38d;
+  font-weight: 600;
 }
 
 /* 回合快速導覽條 */
