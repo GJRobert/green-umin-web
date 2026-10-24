@@ -779,3 +779,12 @@ body {
 }
 
 
+
+/* 新回合預覽區暫時隱藏（義捷不需要）；要恢復時刪除此規則即可 */
+.new-round-preview-box {
+  display: none !important;
+}
+
+.new-round-editor-box {
+  border-bottom: none;
+}
