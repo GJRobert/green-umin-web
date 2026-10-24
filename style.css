@@ -224,24 +224,6 @@ body {
   padding: 24px;
 }
 
-.panel-split {
-  display: flex;
-  padding: 0;
-  overflow: hidden;
-}
-
-.editor-pane, .preview-pane {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  overflow: hidden;
-}
-
-.editor-pane {
-  border-right: 1px solid var(--border-color);
-}
-
 .pane-header {
   height: 40px;
   background-color: var(--sidebar-bg);
@@ -261,37 +243,26 @@ body {
   gap: 10px;
 }
 
-/* 新增回合三分割佈局：左半前文，右上編輯，右下預覽 */
-.new-round-layout {
-  display: flex !important;
-  flex-direction: row !important;
-  padding: 0 !important;
-  height: 100%;
+/* 工作區：預設整版全篇；新增回合時全篇縮成左半，右半上為編輯、下為預覽 */
+.workspace {
+  flex: 1;
+  display: flex;
+  flex-direction: row;
+  min-height: 0;
   overflow: hidden;
 }
 
-.new-round-history-pane {
+.workspace > #view-panel {
   flex: 1;
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  border-right: 1px solid var(--border-color);
-  background-color: var(--surface-color);
-  overflow: hidden;
+  min-width: 0;
 }
 
-.history-content-area {
+.new-round-side {
   flex: 1;
-  padding: 20px;
-  overflow-y: auto;
-  line-height: 1.75;
-}
-
-.new-round-action-pane {
-  flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  height: 100%;
+  border-left: 1px solid var(--border-color);
   overflow: hidden;
 }
 
@@ -354,7 +325,7 @@ body {
   color: #4a5568;
 }
 
-#editor-textarea, #new-round-textarea {
+#new-round-textarea {
   flex: 1;
   padding: 16px;
   border: none;
@@ -364,12 +335,6 @@ body {
   font-size: 0.95rem;
   line-height: 1.6;
   background-color: #fafbfc;
-}
-
-.preview-pane .markdown-body {
-  flex: 1;
-  padding: 16px;
-  overflow-y: auto;
 }
 
 /* Markdown 樣式相容 */

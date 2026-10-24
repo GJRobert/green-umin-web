@@ -30,15 +30,9 @@ const currentFileDisplay = document.getElementById("current-filename");
 const cloudMetaStatus = document.getElementById("cloud-meta-status");
 const draftStatusDisplay = document.getElementById("draft-status");
 const viewPanel = document.getElementById("view-panel");
-const editPanel = document.getElementById("edit-panel");
 const adminPanel = document.getElementById("admin-panel");
 const markdownRender = document.getElementById("markdown-render");
-const editorTextarea = document.getElementById("editor-textarea");
-const editorPreview = document.getElementById("editor-preview");
-const btnViewMode = document.getElementById("btn-view-mode");
-const btnEditMode = document.getElementById("btn-edit-mode");
 const btnNewRound = document.getElementById("btn-new-round");
-const btnSaveDraft = document.getElementById("btn-save-draft");
 const btnToggleAdmin = document.getElementById("btn-toggle-admin");
 const adminAlertDot = document.getElementById("admin-alert-dot");
 const btnCloseAdmin = document.getElementById("btn-close-admin");
@@ -67,25 +61,15 @@ const btnAlertCopyLatest = document.getElementById("btn-alert-copy-latest");
 const btnAlertDismiss = document.getElementById("btn-alert-dismiss");
 
 // 新增回合與優化元素快取
-const newRoundPanel = document.getElementById("new-round-panel");
-const newRoundHistoryContent = document.getElementById("new-round-history-content");
-const btnScrollBottomHistory = document.getElementById("btn-scroll-bottom-history");
+const newRoundSide = document.getElementById("new-round-side");
 const newRoundTextarea = document.getElementById("new-round-textarea");
 const newRoundPreview = document.getElementById("new-round-preview");
 const newRoundTitle = document.getElementById("new-round-title");
 const btnSwitchRoundMode = document.getElementById("btn-switch-round-mode");
 const btnCancelRound = document.getElementById("btn-cancel-round");
 const btnSubmitRound = document.getElementById("btn-submit-round");
-const lastGmBox = document.getElementById("last-gm-box");
-const lastGmTitle = document.getElementById("last-gm-title");
-const lastGmContent = document.getElementById("last-gm-content");
-const btnToggleGmContext = document.getElementById("btn-toggle-gm-context");
-const toggleSplitPreview = document.getElementById("toggle-split-preview");
-const editPreviewPane = document.getElementById("edit-preview-pane");
 
 // 防抖計時器
-let fullTextDraftTimer = null;
-let fullTextPreviewTimer = null;
 let newRoundDraftTimer = null;
 
 function getCurrentAuthor() {
@@ -276,11 +260,8 @@ async function handleRealtimeEvent(payload) {
     cloudMetaStatus.textContent = `☁️ 雲端最新：${latestCloudAuthor} (${formatLocalTime(latestCloudUpdatedAt)}) · 共 ${latestCloudContent.length.toLocaleString()} 字`;
   }
 
-  // 若在閱讀模式且無未存草稿，即時更新閱讀畫面
-  if (!localStorage.getItem("draft_" + currentFile)) {
-    editorTextarea.value = latestCloudContent;
-    renderContent(latestCloudContent);
-  }
+  // 即時更新全篇閱讀畫面
+  renderContent(latestCloudContent);
 
   // 更新管理端 Diff 視圖（直擊最新回合與變更）
   await updateDiffView();
@@ -312,17 +293,9 @@ async function loadDocument(filename) {
 
   // 判斷是否為設定集（唯讀）
   const isEditable = filename.endsWith(".md") && /^\d+\.md$/.test(filename);
-  btnEditMode.style.display = isEditable ? "inline-block" : "none";
   btnNewRound.style.display = isEditable ? "inline-block" : "none";
 
-  // 檢查 localStorage 草稿
-  const localDraft = localStorage.getItem("draft_" + filename);
-  if (localDraft) {
-    draftStatusDisplay.textContent = "有未送出的本機草稿";
-    editorTextarea.value = localDraft;
-  } else {
-    draftStatusDisplay.textContent = "無本機未存草稿";
-  }
+  draftStatusDisplay.textContent = "";
 
   // 從 Supabase 取得最新草稿（含 author 與 updated_at）
   if (supabaseClient) {
@@ -342,10 +315,7 @@ async function loadDocument(filename) {
           cloudMetaStatus.textContent = `☁️ 雲端最新：${latestCloudAuthor} (${formatLocalTime(latestCloudUpdatedAt)}) · 共 ${latestCloudContent.length.toLocaleString()} 字`;
         }
 
-        if (!localDraft) {
-          editorTextarea.value = data.content;
-        }
-        renderContent(localDraft || data.content);
+        renderContent(data.content);
 
         // 同步更新管理端 Diff 檢視器（確保隨時打開都能看到最新回合與檔尾差異）
         await updateDiffView();
@@ -375,7 +345,7 @@ async function loadDocument(filename) {
   }
 
   // 若無雲端資料，以預設或本地草稿呈現
-  renderContent(localDraft || `# ${filename}\n\n（尚無文字或初次載入）`);
+  renderContent(`# ${filename}\n\n（尚無文字或初次載入）`);
 }
 
 // 渲染 Markdown
@@ -423,7 +393,6 @@ function renderContent(rawText) {
 
   // 渲染 HTML
   markdownRender.innerHTML = tocHtml + md.render(processed);
-  editorPreview.innerHTML = md.render(processed);
 }
 
 // 3. 事件監聽
@@ -464,98 +433,9 @@ function setupEventListeners() {
     }
   });
 
-  // 檢視與編輯模式切換
-  btnViewMode.addEventListener("click", () => {
-    viewPanel.style.display = "block";
-    editPanel.style.display = "none";
-    if (newRoundPanel) newRoundPanel.style.display = "none";
-    btnViewMode.classList.add("btn-active");
-    btnEditMode.classList.remove("btn-active");
-  });
-
-  btnEditMode.addEventListener("click", () => {
-    viewPanel.style.display = "none";
-    editPanel.style.display = "flex";
-    if (newRoundPanel) newRoundPanel.style.display = "none";
-    btnEditMode.classList.add("btn-active");
-    btnViewMode.classList.remove("btn-active");
-    if (toggleSplitPreview && toggleSplitPreview.checked) {
-      editorPreview.innerHTML = md.render(editorTextarea.value);
-    }
-  });
-
-  // 全文編輯打字防抖暫存與預覽（徹底消除大檔打字延遲）
-  editorTextarea.addEventListener("input", () => {
-    draftStatusDisplay.textContent = "打字中... (未儲存)";
-
-    clearTimeout(fullTextDraftTimer);
-    fullTextDraftTimer = setTimeout(() => {
-      const text = editorTextarea.value;
-      localStorage.setItem("draft_" + currentFile, text);
-      draftStatusDisplay.textContent = "已暫存於本機 (未送出)";
-    }, 800);
-
-    if (toggleSplitPreview && toggleSplitPreview.checked) {
-      clearTimeout(fullTextPreviewTimer);
-      fullTextPreviewTimer = setTimeout(() => {
-        const text = editorTextarea.value;
-        editorPreview.innerHTML = md.render(text);
-      }, 500);
-    }
-  });
-
-  if (toggleSplitPreview) {
-    toggleSplitPreview.addEventListener("change", (e) => {
-      if (editPreviewPane) {
-        editPreviewPane.style.display = e.target.checked ? "flex" : "none";
-        if (e.target.checked) {
-          editorPreview.innerHTML = md.render(editorTextarea.value);
-        }
-      }
-    });
-  }
-
-  // 送出全文至 Supabase
-  btnSaveDraft.addEventListener("click", async () => {
-    const text = editorTextarea.value;
-    if (!supabaseClient) return alert("Supabase 尚未連線！");
-
-    btnSaveDraft.disabled = true;
-    btnSaveDraft.textContent = "傳送中...";
-
-    try {
-      const nowIso = new Date().toISOString();
-      const authorName = getCurrentAuthor();
-      const { error } = await supabaseClient
-        .from("green_umin_drafts")
-        .upsert({
-          id: currentFile,
-          content: text,
-          author: authorName,
-          updated_at: nowIso
-        });
-
-      if (error) throw error;
-
-      alert(`已以「${authorName}」身分成功送出儲存至雲端！`);
-      draftStatusDisplay.textContent = "草稿已與雲端同步";
-      localStorage.removeItem("draft_" + currentFile);
-      localStorage.setItem("ack_cloud_" + currentFile, nowIso);
-      latestCloudContent = text;
-      latestCloudAuthor = authorName;
-      latestCloudUpdatedAt = nowIso;
-      renderContent(text);
-    } catch (err) {
-      alert("送出失敗：" + err.message);
-    } finally {
-      btnSaveDraft.disabled = false;
-      btnSaveDraft.textContent = "送出全文至雲端";
-    }
-  });
-
   // 輔助：根據 roundEditMode 初始化右上角輕量回合編輯區
   function setupRoundEditorByMode(forceMode = null) {
-    const baseContent = latestCloudContent || editorTextarea.value || "";
+    const baseContent = latestCloudContent || "";
     const latestRounds = extractLatestRounds(baseContent, 1);
     const lastRound = latestRounds[0];
 
@@ -584,24 +464,6 @@ function setupEventListeners() {
         const nextNum = parseInt(matches[matches.length - 1][1], 10) + 1;
         nextTargetHeading = `## User ${nextNum}`;
       }
-    }
-
-    // 在左半面板渲染前文歷史紀錄，並自動滾動至最底部
-    if (newRoundHistoryContent) {
-      const historySource =
-        roundEditMode === "append_current" && lastRound && lastRound.startIndex > 0
-          ? baseContent.slice(0, lastRound.startIndex).trimEnd()
-          : baseContent;
-      let processedHistory = (historySource || baseContent).replace(/\[\[(.*?)\]\]/g, (match, p1) => {
-        const parts = p1.split("|");
-        const label = parts[1] || parts[0];
-        return `<span class="wikilink" style="color: #2b7a78; font-weight: 500;">${label}</span>`;
-      });
-      processedHistory = processedHistory.replace(/==(.*?)==/g, "<mark>$1</mark>");
-      newRoundHistoryContent.innerHTML = md.render(processedHistory);
-      setTimeout(() => {
-        newRoundHistoryContent.scrollTop = newRoundHistoryContent.scrollHeight;
-      }, 50);
     }
 
     if (roundEditMode === "append_current" && lastRound) {
@@ -637,13 +499,14 @@ function setupEventListeners() {
     }
   }
 
-  // 新增／補充回合快捷按鈕：開啟「輕量極速三分割工作台」
+  // 新增回合：全篇縮成左半，右半出現編輯區（上）與預覽區（下）；再按一次可收合
   btnNewRound.addEventListener("click", () => {
-    viewPanel.style.display = "none";
-    editPanel.style.display = "none";
-    if (newRoundPanel) newRoundPanel.style.display = "flex";
-    btnViewMode.classList.remove("btn-active");
-    btnEditMode.classList.remove("btn-active");
+    if (newRoundSide.style.display === "flex") {
+      closeNewRoundSide();
+      return;
+    }
+    newRoundSide.style.display = "flex";
+    btnNewRound.classList.add("btn-active");
     setupRoundEditorByMode(null);
   });
 
@@ -670,33 +533,8 @@ function setupEventListeners() {
     });
   }
 
-  if (btnToggleGmContext && lastGmContent) {
-    btnToggleGmContext.addEventListener("click", () => {
-      if (lastGmContent.style.display === "none") {
-        lastGmContent.style.display = "block";
-        btnToggleGmContext.textContent = "收合";
-      } else {
-        lastGmContent.style.display = "none";
-        btnToggleGmContext.textContent = "展開";
-      }
-    });
-  }
-
-  if (btnScrollBottomHistory && newRoundHistoryContent) {
-    btnScrollBottomHistory.addEventListener("click", () => {
-      newRoundHistoryContent.scrollTo({
-        top: newRoundHistoryContent.scrollHeight,
-        behavior: "smooth"
-      });
-    });
-  }
-
   if (btnCancelRound) {
-    btnCancelRound.addEventListener("click", () => {
-      if (newRoundPanel) newRoundPanel.style.display = "none";
-      viewPanel.style.display = "block";
-      btnViewMode.classList.add("btn-active");
-    });
+    btnCancelRound.addEventListener("click", closeNewRoundSide);
   }
 
   if (btnSubmitRound) {
@@ -755,12 +593,9 @@ function setupEventListeners() {
         latestCloudContent = mergedContent;
         latestCloudAuthor = authorName;
         latestCloudUpdatedAt = nowIso;
-        editorTextarea.value = mergedContent;
         renderContent(mergedContent);
 
-        if (newRoundPanel) newRoundPanel.style.display = "none";
-        viewPanel.style.display = "block";
-        btnViewMode.classList.add("btn-active");
+        closeNewRoundSide();
 
         setTimeout(() => {
           viewPanel.scrollTop = viewPanel.scrollHeight;
@@ -787,11 +622,6 @@ function setupEventListeners() {
 
   if (btnAlertJumpBottom) {
     btnAlertJumpBottom.addEventListener("click", () => {
-      if (newRoundPanel) newRoundPanel.style.display = "none";
-      editPanel.style.display = "none";
-      viewPanel.style.display = "block";
-      btnViewMode.classList.add("btn-active");
-      btnEditMode.classList.remove("btn-active");
       setTimeout(() => {
         viewPanel.scrollTo({ top: viewPanel.scrollHeight, behavior: "smooth" });
       }, 60);
@@ -1218,6 +1048,11 @@ async function writeToLocalVault(filename, content) {
     console.error("本機寫入失敗：", err);
     alert("本機寫入失敗：" + err.message);
   }
+}
+
+function closeNewRoundSide() {
+  if (newRoundSide) newRoundSide.style.display = "none";
+  btnNewRound.classList.remove("btn-active");
 }
 
 function updateActiveFile(targetLi) {
