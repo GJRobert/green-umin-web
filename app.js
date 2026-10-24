@@ -728,7 +728,6 @@ function setupEventListeners() {
         setTimeout(() => {
           viewPanel.scrollTop = viewPanel.scrollHeight;
         }, 100);
-        }, 100);
       } catch (err) {
         alert("送出失敗：" + err.message);
       } finally {
