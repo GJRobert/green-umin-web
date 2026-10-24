@@ -162,8 +162,34 @@ function formatLocalTime(isoStr) {
   }
 }
 
+// 內容雜湊計算（正規化換行與頭尾空白，避免僅時間戳不同而內容相同時誤彈通知）
+function contentHash(text) {
+  const norm = String(text || "").replace(/\r\n/g, "\n").trim();
+  let h = 5381;
+  for (let i = 0; i < norm.length; i++) {
+    h = ((h << 5) + h + norm.charCodeAt(i)) | 0;
+  }
+  return norm.length + ":" + (h >>> 0).toString(36);
+}
+
+function getSeenHash(filename) {
+  return localStorage.getItem("seen_hash_" + filename);
+}
+
+function markSeen(filename, content) {
+  if (filename && typeof content === "string") {
+    localStorage.setItem("seen_hash_" + filename, contentHash(content));
+  }
+}
+
+// 紀錄當前頂部警示橫幅所指向的目標檔案與內容（解決跨檔通知點開 Diff 仍停在舊檔的問題）
+let alertTargetFile = null;
+let alertTargetContent = null;
+
 // 顯示醒目雲端更新警示
-function triggerCloudAlert({ filename, author, updatedAt, isRealtime = false, summaryText = "" }) {
+function triggerCloudAlert({ filename, author, updatedAt, isRealtime = false, summaryText = "", content = null }) {
+  alertTargetFile = filename;
+  alertTargetContent = content;
   const timeStr = formatLocalTime(updatedAt);
   if (cloudAlertBanner) {
     cloudAlertBanner.style.display = "flex";
@@ -187,8 +213,25 @@ function dismissCloudAlert() {
   if (btnToggleAdmin) btnToggleAdmin.classList.remove("btn-admin-has-alert");
   if (cloudMetaStatus) cloudMetaStatus.classList.remove("meta-new");
   document.title = "綠光與流求 Web 共筆";
+  if (alertTargetFile && typeof alertTargetContent === "string") {
+    markSeen(alertTargetFile, alertTargetContent);
+  }
+  if (currentFile && latestCloudContent) {
+    markSeen(currentFile, latestCloudContent);
+  }
   if (currentFile && latestCloudUpdatedAt) {
     localStorage.setItem("ack_cloud_" + currentFile, latestCloudUpdatedAt);
+  }
+  alertTargetFile = null;
+  alertTargetContent = null;
+}
+
+// 若橫幅警示的是別的檔案，點橫幅按鈕時自動切換至該檔案再開啟 Diff / 跳轉
+async function ensureAlertFileLoaded() {
+  if (alertTargetFile && alertTargetFile !== currentFile) {
+    const targetLi = document.querySelector(`.file-list li[data-file="${alertTargetFile}"]`);
+    if (targetLi) updateActiveFile(targetLi);
+    await loadDocument(alertTargetFile, { skipAlertCheck: true });
   }
 }
 
@@ -233,23 +276,40 @@ async function handleRealtimeEvent(payload) {
     await refreshChapterListFromCloud(false);
   }
 
-  // 若更新的是其他章節，且作者不是本機目前選定的身分，跳出橫幅提醒
+  const incomingContent = row.content || "";
+  const oldRecordContent = payload.old && typeof payload.old.content === "string" ? payload.old.content : null;
+  const isSameAsOldRecord = oldRecordContent !== null && contentHash(oldRecordContent) === contentHash(incomingContent);
+  const isSameAsSeen = getSeenHash(row.id) === contentHash(incomingContent);
+
+  // 若更新的是其他章節
   if (row.id !== currentFile) {
-    if (row.author && row.author !== getCurrentAuthor()) {
+    if (row.author === getCurrentAuthor() || row.author === "本機同步") {
+      markSeen(row.id, incomingContent);
+      return;
+    }
+    // 只有當內容真的有變（且本機尚未看過相同內容）時才跳出橫幅提醒
+    if (row.author && !isSameAsOldRecord && !isSameAsSeen) {
+      const latestRound = extractLatestRounds(incomingContent, 1)[0];
       triggerCloudAlert({
         filename: row.id,
         author: row.author,
         updatedAt: row.updated_at || new Date().toISOString(),
         isRealtime: true,
-        summaryText: "點擊左側章節可切換檢視"
+        summaryText: latestRound
+          ? `最新段落：${latestRound.heading}（點「檢視最新編輯」自動切換至 ${row.id}）`
+          : `點「檢視最新編輯」自動切換至 ${row.id}`,
+        content: incomingContent
       });
     }
     return;
   }
 
+  const isSameAsCurrentMemory = latestCloudContent && contentHash(latestCloudContent) === contentHash(incomingContent);
   const oldLen = latestCloudContent ? latestCloudContent.length : 0;
-  previousCloudContent = (payload.old && payload.old.content) ? payload.old.content : latestCloudContent;
-  latestCloudContent = row.content || "";
+  if (!isSameAsCurrentMemory) {
+    previousCloudContent = oldRecordContent !== null ? oldRecordContent : latestCloudContent;
+  }
+  latestCloudContent = incomingContent;
   latestCloudAuthor = row.author || "義捷";
   latestCloudUpdatedAt = row.updated_at || new Date().toISOString();
 
@@ -267,8 +327,16 @@ async function handleRealtimeEvent(payload) {
   await updateDiffView();
   btnWriteVault.disabled = !localDirHandle;
 
-  // 若是別人（非本機當前設定之身分）送出的更新，才觸發醒目視覺與聲音通知
-  if (latestCloudAuthor !== getCurrentAuthor()) {
+  // 若是自己送出或「本機同步」，或內容與上次已讀／送出完全一致（僅時間戳改變），直接記錄已讀、不跳假警報！
+  if (
+    latestCloudAuthor === getCurrentAuthor() ||
+    latestCloudAuthor === "本機同步" ||
+    isSameAsOldRecord ||
+    isSameAsSeen ||
+    isSameAsCurrentMemory
+  ) {
+    markSeen(currentFile, latestCloudContent);
+  } else {
     const latestRound = extractLatestRounds(latestCloudContent, 1)[0];
     const roundHint = latestRound ? `最新回合：${latestRound.heading} (${diffSign} 字)` : `字數變化：${diffSign} 字`;
     triggerCloudAlert({
@@ -276,7 +344,8 @@ async function handleRealtimeEvent(payload) {
       author: latestCloudAuthor,
       updatedAt: latestCloudUpdatedAt,
       isRealtime: true,
-      summaryText: roundHint
+      summaryText: roundHint,
+      content: latestCloudContent
     });
   }
 
@@ -287,7 +356,7 @@ async function handleRealtimeEvent(payload) {
 }
 
 // 2. 切換載入檔案
-async function loadDocument(filename) {
+async function loadDocument(filename, options = {}) {
   currentFile = filename;
   currentFileDisplay.textContent = filename;
 
@@ -320,21 +389,30 @@ async function loadDocument(filename) {
         // 同步更新管理端 Diff 檢視器（確保隨時打開都能看到最新回合與檔尾差異）
         await updateDiffView();
 
-        // 檢查是否為尚未讀過的新雲端進度（且作者與本機當前身分不同）
+        // 以內容雜湊比對是否為尚未看過的新進度（若內容相同、僅時間戳不同，則不彈假警報）
+        const currentHash = contentHash(latestCloudContent);
+        const seenHash = getSeenHash(filename);
         const lastAck = localStorage.getItem("ack_cloud_" + filename);
         const latestRound = extractLatestRounds(latestCloudContent, 1)[0];
-        if (
-          latestCloudUpdatedAt &&
-          lastAck !== latestCloudUpdatedAt &&
-          latestCloudAuthor !== getCurrentAuthor() &&
-          latestCloudAuthor !== "本機同步"
+
+        if (options.skipAlertCheck) {
+          markSeen(filename, latestCloudContent);
+        } else if (seenHash === currentHash) {
+          // 內容與本機上次看過／送出的完全相同，靜默略過
+        } else if (
+          latestCloudAuthor === getCurrentAuthor() ||
+          latestCloudAuthor === "本機同步" ||
+          (lastAck && lastAck === latestCloudUpdatedAt)
         ) {
+          markSeen(filename, latestCloudContent);
+        } else if (latestCloudUpdatedAt) {
           triggerCloudAlert({
             filename,
             author: latestCloudAuthor,
             updatedAt: latestCloudUpdatedAt,
             isRealtime: false,
-            summaryText: latestRound ? `最新段落：${latestRound.heading}` : ""
+            summaryText: latestRound ? `最新段落：${latestRound.heading}` : "",
+            content: latestCloudContent
           });
         }
         return;
@@ -594,6 +672,7 @@ function setupEventListeners() {
         alert(`🎉 已以「${authorName}」身分成功送出至雲端！`);
         localStorage.removeItem("new_round_" + currentFile);
         localStorage.setItem("ack_cloud_" + currentFile, nowIso);
+        markSeen(currentFile, mergedContent);
         latestCloudContent = mergedContent;
         latestCloudAuthor = authorName;
         latestCloudUpdatedAt = nowIso;
@@ -613,9 +692,10 @@ function setupEventListeners() {
     });
   }
 
-  // 頂部警示橫幅按鈕事件
+  // 頂部警示橫幅按鈕事件（若警示的是別的檔案，先自動切換載入該檔案！）
   if (btnAlertViewDiff) {
     btnAlertViewDiff.addEventListener("click", async () => {
+      await ensureAlertFileLoaded();
       adminPanel.style.display = "block";
       currentDiffMode = "smart";
       updateDiffTabButtons();
@@ -625,7 +705,8 @@ function setupEventListeners() {
   }
 
   if (btnAlertJumpBottom) {
-    btnAlertJumpBottom.addEventListener("click", () => {
+    btnAlertJumpBottom.addEventListener("click", async () => {
+      await ensureAlertFileLoaded();
       setTimeout(() => {
         viewPanel.scrollTo({ top: viewPanel.scrollHeight, behavior: "smooth" });
       }, 60);
@@ -633,7 +714,8 @@ function setupEventListeners() {
   }
 
   if (btnAlertCopyLatest) {
-    btnAlertCopyLatest.addEventListener("click", () => {
+    btnAlertCopyLatest.addEventListener("click", async () => {
+      await ensureAlertFileLoaded();
       copyLatestRoundToClipboard(btnAlertCopyLatest);
     });
   }
@@ -697,6 +779,7 @@ function setupEventListeners() {
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
+      markSeen(currentFile, latestCloudContent);
       dismissCloudAlert();
     });
   }
@@ -747,46 +830,64 @@ function setupEventListeners() {
     });
   }
 
-  // 一鍵推送本機所有 Markdown 至雲端
+  // 一鍵推送本機所有 Markdown 至雲端（智慧差異上傳：只上傳內容真正有變的檔案，避免刷動時間戳觸發假通知！）
   if (btnSyncAllLocal) {
     btnSyncAllLocal.addEventListener("click", async () => {
       if (!localDirHandle && localFallbackFiles.size === 0) return alert("請先選擇本機資料夾！");
       if (!supabaseClient) return alert("Supabase 尚未連線！");
-      if (!confirm("確定要將本機資料夾內的所有 .md 檔案推送到雲端 Supabase 嗎？")) return;
+      if (!confirm("確定要將本機有變更的 .md 檔案推送到雲端 Supabase 嗎？（內容完全未變的檔案將自動跳過）")) return;
 
       btnSyncAllLocal.disabled = true;
-      syncAllStatus.textContent = "全量同步中...";
+      syncAllStatus.textContent = "比對雲端差異並同步中...";
 
       try {
-        let count = 0;
+        // 先撈取雲端現有各檔的內容雜湊，只推送有差異的檔案
+        const { data: cloudRows } = await supabaseClient
+          .from("green_umin_drafts")
+          .select("id, content");
+        const cloudHashMap = new Map();
+        if (cloudRows) {
+          cloudRows.forEach((r) => cloudHashMap.set(r.id, contentHash(r.content || "")));
+        }
+
+        const localEntries = [];
         if (localDirHandle) {
           for await (const entry of localDirHandle.values()) {
             if (entry.kind === "file" && entry.name.endsWith(".md")) {
               const file = await entry.getFile();
               const text = await file.text();
-              await supabaseClient.from("green_umin_drafts").upsert({
-                id: entry.name,
-                content: text,
-                author: "本機同步",
-                updated_at: new Date().toISOString()
-              });
-              count++;
+              localEntries.push([entry.name, text]);
             }
           }
         } else {
           for (const [name, text] of localFallbackFiles.entries()) {
-            await supabaseClient.from("green_umin_drafts").upsert({
-              id: name,
-              content: text,
-              author: "本機同步",
-              updated_at: new Date().toISOString()
-            });
-            count++;
+            localEntries.push([name, text]);
           }
         }
-        syncAllStatus.textContent = `成功同步 ${count} 個檔案至雲端！`;
-        alert(`已成功將本機 ${count} 個 Markdown 檔案同步至雲端 Supabase！`);
-        loadDocument(currentFile);
+
+        let updatedCount = 0;
+        let skippedCount = 0;
+        const authorName = getCurrentAuthor();
+        for (const [name, text] of localEntries) {
+          const localHash = contentHash(text);
+          if (cloudHashMap.get(name) === localHash) {
+            skippedCount++;
+            markSeen(name, text);
+            continue;
+          }
+          await supabaseClient.from("green_umin_drafts").upsert({
+            id: name,
+            content: text,
+            author: authorName,
+            updated_at: new Date().toISOString()
+          });
+          markSeen(name, text);
+          updatedCount++;
+        }
+
+        syncAllStatus.textContent = `同步完成：更新 ${updatedCount} 個有變更的檔案（略過 ${skippedCount} 個未變更檔）！`;
+        alert(`同步完成！\n・實際更新上傳：${updatedCount} 個檔案\n・內容相同自動略過：${skippedCount} 個檔案`);
+        await refreshChapterListFromCloud(false);
       } catch (e) {
         console.error("全量同步失敗：", e);
         syncAllStatus.textContent = "同步失敗：" + e.message;
