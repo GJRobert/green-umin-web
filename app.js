@@ -41,6 +41,25 @@ const autoWriteToggle = document.getElementById("auto-write-toggle");
 const btnSyncAllLocal = document.getElementById("btn-sync-all-local");
 const syncAllStatus = document.getElementById("sync-all-status");
 
+// 新增回合與優化元素快取
+const newRoundPanel = document.getElementById("new-round-panel");
+const newRoundTextarea = document.getElementById("new-round-textarea");
+const newRoundPreview = document.getElementById("new-round-preview");
+const newRoundTitle = document.getElementById("new-round-title");
+const btnCancelRound = document.getElementById("btn-cancel-round");
+const btnSubmitRound = document.getElementById("btn-submit-round");
+const lastGmBox = document.getElementById("last-gm-box");
+const lastGmTitle = document.getElementById("last-gm-title");
+const lastGmContent = document.getElementById("last-gm-content");
+const btnToggleGmContext = document.getElementById("btn-toggle-gm-context");
+const toggleSplitPreview = document.getElementById("toggle-split-preview");
+const editPreviewPane = document.getElementById("edit-preview-pane");
+
+// 防抖計時器
+let fullTextDraftTimer = null;
+let fullTextPreviewTimer = null;
+let newRoundDraftTimer = null;
+
 // 啟動函式
 window.addEventListener("DOMContentLoaded", () => {
   initSupabase();
@@ -202,6 +221,7 @@ function setupEventListeners() {
   btnViewMode.addEventListener("click", () => {
     viewPanel.style.display = "block";
     editPanel.style.display = "none";
+    if (newRoundPanel) newRoundPanel.style.display = "none";
     btnViewMode.classList.add("btn-active");
     btnEditMode.classList.remove("btn-active");
   });
@@ -209,19 +229,46 @@ function setupEventListeners() {
   btnEditMode.addEventListener("click", () => {
     viewPanel.style.display = "none";
     editPanel.style.display = "flex";
+    if (newRoundPanel) newRoundPanel.style.display = "none";
     btnEditMode.classList.add("btn-active");
     btnViewMode.classList.remove("btn-active");
+    if (toggleSplitPreview && toggleSplitPreview.checked) {
+      editorPreview.innerHTML = md.render(editorTextarea.value);
+    }
   });
 
-  // 編輯打字即時暫存
+  // 全文編輯打字防抖暫存與預覽（徹底消除大檔打字延遲）
   editorTextarea.addEventListener("input", () => {
-    const text = editorTextarea.value;
-    localStorage.setItem("draft_" + currentFile, text);
-    draftStatusDisplay.textContent = "已暫存於本機 (未送出)";
-    editorPreview.innerHTML = md.render(text);
+    draftStatusDisplay.textContent = "打字中... (未儲存)";
+
+    clearTimeout(fullTextDraftTimer);
+    fullTextDraftTimer = setTimeout(() => {
+      const text = editorTextarea.value;
+      localStorage.setItem("draft_" + currentFile, text);
+      draftStatusDisplay.textContent = "已暫存於本機 (未送出)";
+    }, 800);
+
+    if (toggleSplitPreview && toggleSplitPreview.checked) {
+      clearTimeout(fullTextPreviewTimer);
+      fullTextPreviewTimer = setTimeout(() => {
+        const text = editorTextarea.value;
+        editorPreview.innerHTML = md.render(text);
+      }, 500);
+    }
   });
 
-  // 送出回合至 Supabase
+  if (toggleSplitPreview) {
+    toggleSplitPreview.addEventListener("change", (e) => {
+      if (editPreviewPane) {
+        editPreviewPane.style.display = e.target.checked ? "flex" : "none";
+        if (e.target.checked) {
+          editorPreview.innerHTML = md.render(editorTextarea.value);
+        }
+      }
+    });
+  }
+
+  // 送出全文至 Supabase
   btnSaveDraft.addEventListener("click", async () => {
     const text = editorTextarea.value;
     if (!supabaseClient) return alert("Supabase 尚未連線！");
@@ -241,48 +288,170 @@ function setupEventListeners() {
 
       if (error) throw error;
 
-      alert("已成功送出回合至雲端！");
+      alert("已成功送出儲存至雲端！");
       draftStatusDisplay.textContent = "草稿已與雲端同步";
       localStorage.removeItem("draft_" + currentFile);
+      latestCloudContent = text;
       renderContent(text);
     } catch (err) {
       alert("送出失敗：" + err.message);
     } finally {
       btnSaveDraft.disabled = false;
-      btnSaveDraft.textContent = "送出回合至雲端";
+      btnSaveDraft.textContent = "送出全文至雲端";
     }
   });
 
-  // 新增回合快捷按鈕（支援年份 User 與序號 User）
+  // 新增回合快捷按鈕：開啟「輕量極速模式」（避免載入 50 萬字大檔，打字 0 延遲）
   btnNewRound.addEventListener("click", () => {
-    btnEditMode.click();
-    const currentVal = editorTextarea.value;
+    viewPanel.style.display = "none";
+    editPanel.style.display = "none";
+    if (newRoundPanel) newRoundPanel.style.display = "flex";
+    btnViewMode.classList.remove("btn-active");
+    btnEditMode.classList.remove("btn-active");
 
-    // 優先檢查「年份 User / 年份 GM」格式（例如：## 1248 GM、## 1249 User）
-    const yearMatches = [...currentVal.matchAll(/##\s*(\d{4})\s*(User|GM)/gi)];
-    let newSection = "";
+    const baseContent = latestCloudContent || editorTextarea.value || "";
+
+    // 擷取上一回合 GM 背景
+    if (lastGmBox && lastGmContent) {
+      const gmMatches = [...baseContent.matchAll(/##\s*(\d{4}\s*GM[^\n]*)([\s\S]*?)(?=(##\s*\d{4}\s*(User|GM)|$))/gi)];
+      if (gmMatches.length > 0) {
+        const lastGm = gmMatches[gmMatches.length - 1];
+        lastGmTitle.textContent = "上一回合背景：" + lastGm[1].trim();
+        lastGmContent.innerHTML = md.render(lastGm[2].trim().substring(0, 1500) + (lastGm[2].trim().length > 1500 ? "..." : ""));
+        lastGmBox.style.display = "flex";
+      } else {
+        lastGmBox.style.display = "none";
+      }
+    }
+
+    // 計算下一個 User 回合標題
+    const yearMatches = [...baseContent.matchAll(/##\s*(\d{4})\s*(User|GM)/gi)];
+    let targetHeading = "## User 1";
     if (yearMatches.length > 0) {
       const last = yearMatches[yearMatches.length - 1];
       const lastYear = parseInt(last[1], 10);
       const lastRole = last[2].toUpperCase();
-      // 若上一回合為 GM，新增下一年度 User；若上一回合為 User，新增下一年度 User
       const nextYear = lastRole === "GM" ? lastYear + 1 : lastYear + 1;
-      newSection = `\n\n## ${nextYear} User\n\n`;
+      targetHeading = `## ${nextYear} User`;
     } else {
-      // 次選：舊版 User 序號格式（例如：## User 191）
-      const matches = [...currentVal.matchAll(/##\s*User\s*(\d+)/gi)];
-      let nextNum = 1;
+      const matches = [...baseContent.matchAll(/##\s*User\s*(\d+)/gi)];
       if (matches.length > 0) {
-        nextNum = parseInt(matches[matches.length - 1][1], 10) + 1;
+        const nextNum = parseInt(matches[matches.length - 1][1], 10) + 1;
+        targetHeading = `## User ${nextNum}`;
       }
-      newSection = `\n\n## User ${nextNum}\n\n`;
     }
 
-    editorTextarea.value = currentVal + newSection;
-    editorTextarea.scrollTop = editorTextarea.scrollHeight;
-    editorTextarea.focus();
-    editorTextarea.dispatchEvent(new Event("input"));
+    if (newRoundTitle) {
+      newRoundTitle.textContent = `✍️ 撰寫新回合（極速模式） - ${targetHeading}`;
+    }
+
+    // 檢查是否有本回合草稿
+    const savedRoundDraft = localStorage.getItem("new_round_" + currentFile);
+    if (newRoundTextarea) {
+      if (savedRoundDraft) {
+        newRoundTextarea.value = savedRoundDraft;
+      } else {
+        newRoundTextarea.value = `${targetHeading}\n\n`;
+      }
+      if (newRoundPreview) {
+        newRoundPreview.innerHTML = md.render(newRoundTextarea.value);
+      }
+      newRoundTextarea.focus();
+      newRoundTextarea.selectionStart = newRoundTextarea.value.length;
+      newRoundTextarea.selectionEnd = newRoundTextarea.value.length;
+    }
   });
+
+  // 新回合編輯打字事件
+  if (newRoundTextarea) {
+    newRoundTextarea.addEventListener("input", () => {
+      const text = newRoundTextarea.value;
+      if (newRoundPreview) {
+        newRoundPreview.innerHTML = md.render(text);
+      }
+      clearTimeout(newRoundDraftTimer);
+      newRoundDraftTimer = setTimeout(() => {
+        localStorage.setItem("new_round_" + currentFile, text);
+      }, 400);
+    });
+  }
+
+  if (btnToggleGmContext && lastGmContent) {
+    btnToggleGmContext.addEventListener("click", () => {
+      if (lastGmContent.style.display === "none") {
+        lastGmContent.style.display = "block";
+        btnToggleGmContext.textContent = "收合";
+      } else {
+        lastGmContent.style.display = "none";
+        btnToggleGmContext.textContent = "展開";
+      }
+    });
+  }
+
+  if (btnCancelRound) {
+    btnCancelRound.addEventListener("click", () => {
+      if (newRoundPanel) newRoundPanel.style.display = "none";
+      viewPanel.style.display = "block";
+      btnViewMode.classList.add("btn-active");
+    });
+  }
+
+  if (btnSubmitRound) {
+    btnSubmitRound.addEventListener("click", async () => {
+      const newRoundText = newRoundTextarea.value.trim();
+      if (!newRoundText) return alert("新回合內容不可為空！");
+      if (!supabaseClient) return alert("Supabase 尚未連線！");
+
+      if (!confirm("確定要送出此新回合至雲端嗎？")) return;
+
+      btnSubmitRound.disabled = true;
+      btnSubmitRound.textContent = "傳送中...";
+
+      try {
+        let baseContent = latestCloudContent;
+        if (!baseContent) {
+          const { data } = await supabaseClient
+            .from("green_umin_drafts")
+            .select("content")
+            .eq("id", currentFile)
+            .single();
+          baseContent = data && data.content ? data.content : "";
+        }
+
+        const mergedContent = baseContent.trim() + "\n\n" + newRoundText + "\n";
+
+        const { error } = await supabaseClient
+          .from("green_umin_drafts")
+          .upsert({
+            id: currentFile,
+            content: mergedContent,
+            author: "義捷",
+            updated_at: new Date().toISOString()
+          });
+
+        if (error) throw error;
+
+        alert("🎉 新回合已成功送出至雲端！");
+        localStorage.removeItem("new_round_" + currentFile);
+        latestCloudContent = mergedContent;
+        editorTextarea.value = mergedContent;
+        renderContent(mergedContent);
+
+        if (newRoundPanel) newRoundPanel.style.display = "none";
+        viewPanel.style.display = "block";
+        btnViewMode.classList.add("btn-active");
+
+        setTimeout(() => {
+          viewPanel.scrollTop = viewPanel.scrollHeight;
+        }, 100);
+      } catch (err) {
+        alert("送出失敗：" + err.message);
+      } finally {
+        btnSubmitRound.disabled = false;
+        btnSubmitRound.textContent = "送出新回合";
+      }
+    });
+  }
 
   // 管理端面板切換
   btnToggleAdmin.addEventListener("click", () => {

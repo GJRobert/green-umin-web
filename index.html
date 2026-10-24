@@ -79,18 +79,46 @@
           </div>
         </section>
 
-        <!-- 編輯畫面（分割左編輯右預覽） -->
+        <!-- 全文編輯畫面（分割左編輯右預覽） -->
         <section id="edit-panel" class="panel panel-split" style="display: none;">
           <div class="editor-pane">
             <div class="pane-header">
-              <span>原始碼編輯</span>
-              <button id="btn-save-draft" class="btn btn-sm btn-primary">送出回合至雲端</button>
+              <span>全文編輯（含防抖優化）</span>
+              <div class="pane-header-actions">
+                <label class="preview-toggle-label"><input type="checkbox" id="toggle-split-preview" checked> 即時預覽</label>
+                <button id="btn-save-draft" class="btn btn-sm btn-primary">送出全文至雲端</button>
+              </div>
             </div>
-            <textarea id="editor-textarea" placeholder="在此撰寫章節或新增回合..."></textarea>
+            <textarea id="editor-textarea" placeholder="在此檢視或編輯全文..."></textarea>
           </div>
-          <div class="preview-pane">
+          <div class="preview-pane" id="edit-preview-pane">
             <div class="pane-header">即時預覽</div>
             <div id="editor-preview" class="markdown-body"></div>
+          </div>
+        </section>
+
+        <!-- 新增回合專屬輕量面板（極速打字、0 延遲） -->
+        <section id="new-round-panel" class="panel panel-split" style="display: none;">
+          <div class="editor-pane">
+            <div class="pane-header">
+              <span id="new-round-title">✍️ 撰寫新回合（極速模式）</span>
+              <div class="pane-header-actions">
+                <button id="btn-cancel-round" class="btn btn-sm">返回閱讀</button>
+                <button id="btn-submit-round" class="btn btn-sm btn-primary">送出新回合</button>
+              </div>
+            </div>
+            <div class="round-context-box" id="last-gm-box" style="display: none;">
+              <div class="round-context-header">
+                <span id="last-gm-title">上一回合背景 (GM)</span>
+                <button id="btn-toggle-gm-context" class="btn btn-sm">收合</button>
+              </div>
+              <div id="last-gm-content" class="round-context-body"></div>
+            </div>
+            <textarea id="new-round-textarea" placeholder="在此輸入新回合行動與對話（幾百字輕量輸入，打字極順暢）..."></textarea>
+          </div>
+          <div class="preview-pane">
+            <div class="pane-header">新回合即時預覽</div>
+            <div id="new-round-preview" class="markdown-body"></div>
           </div>
         </section>
 

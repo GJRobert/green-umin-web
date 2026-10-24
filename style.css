@@ -255,15 +255,57 @@ body {
   color: var(--text-muted);
 }
 
-#editor-textarea {
+.pane-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.preview-toggle-label {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.round-context-box {
+  background-color: #f7fafc;
+  border-bottom: 1px solid var(--border-color);
+  max-height: 160px;
+  display: flex;
+  flex-direction: column;
+}
+
+.round-context-header {
+  padding: 6px 14px;
+  background-color: #edf2f7;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.round-context-body {
+  padding: 8px 14px;
+  font-size: 0.85rem;
+  overflow-y: auto;
+  line-height: 1.5;
+  color: #4a5568;
+}
+
+#editor-textarea, #new-round-textarea {
   flex: 1;
   padding: 16px;
   border: none;
   outline: none;
   resize: none;
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace;
-  font-size: 0.92rem;
-  line-height: 1.5;
+  font-size: 0.95rem;
+  line-height: 1.6;
   background-color: #fafbfc;
 }
 
