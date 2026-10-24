@@ -508,6 +508,10 @@ function setupEventListeners() {
     newRoundSide.style.display = "flex";
     btnNewRound.classList.add("btn-active");
     setupRoundEditorByMode(null);
+    // 左半全篇自動捲到最新處，方便對照
+    setTimeout(() => {
+      viewPanel.scrollTop = viewPanel.scrollHeight;
+    }, 60);
   });
 
   if (btnSwitchRoundMode) {
