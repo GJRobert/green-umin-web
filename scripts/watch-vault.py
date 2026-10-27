@@ -55,10 +55,11 @@ def upload_file_to_cloud(filename: str, content: str, author: str = AUTHOR_NAME)
     }
     http_json_request(endpoint, method="POST", data=payload, headers={"Prefer": "resolution=merge-duplicates"})
 
-def fetch_cloud_hashes():
-    endpoint = f"{SUPABASE_URL}/rest/v1/green_umin_drafts?select=id,content,author,updated_at"
+def fetch_cloud_meta():
+    """只抓取各檔案的 metadata (id, author, updated_at)，完全不下載大檔 content，節省 99.9% 出站流量"""
+    endpoint = f"{SUPABASE_URL}/rest/v1/green_umin_drafts?select=id,author,updated_at"
     rows = http_json_request(endpoint, method="GET") or []
-    return {r["id"]: {"hash": compute_hash(r.get("content", "")), "author": r.get("author", ""), "updated_at": r.get("updated_at", "")} for r in rows}
+    return {r["id"]: {"author": r.get("author", ""), "updated_at": r.get("updated_at", "")} for r in rows}
 
 def main():
     vault_path = os.path.abspath(VAULT_DIR)
@@ -91,6 +92,9 @@ def main():
     print(f"✅ 初始掃描完成，已追蹤 {len(local_state)} 個 Markdown 檔案。進入持續監聽模式...\n")
 
     cloud_check_counter = 0
+
+    # 記錄已知的雲端更新時間，避免重複跳提醒
+    known_cloud_updated = {}
 
     while True:
         try:
@@ -129,18 +133,20 @@ def main():
                     else:
                         local_state[fname] = {"mtime": mtime, "hash": current_hash}
 
-            # 2. 每 15 秒檢查一次雲端是否有他人上傳的更新
-            if cloud_check_counter >= int(15 / CHECK_INTERVAL):
+            # 2. 每 60 秒極輕量檢查一次雲端是否有他人上傳的更新（每次只傳幾百 Bytes，零流量負擔）
+            if cloud_check_counter >= int(60 / CHECK_INTERVAL):
                 cloud_check_counter = 0
                 try:
-                    cloud_data = fetch_cloud_hashes()
-                    for cid, cinfo in cloud_data.items():
-                        # 若雲端作者不是自己，且本地 hash 與雲端不同，提醒本地有未抓取的新進度
-                        if cinfo["author"] and cinfo["author"] != AUTHOR_NAME and cinfo["author"] != "本機同步":
-                            loc = local_state.get(cid)
-                            if loc and loc["hash"] != cinfo["hash"]:
+                    cloud_meta = fetch_cloud_meta()
+                    for cid, cinfo in cloud_meta.items():
+                        c_author = cinfo.get("author") or ""
+                        c_updated = cinfo.get("updated_at") or ""
+                        # 若雲端作者不是自己，且更新時間與先前不同，提醒本地有新進度
+                        if c_author and c_author != AUTHOR_NAME and c_author != "本機同步":
+                            if known_cloud_updated.get(cid) != c_updated:
+                                known_cloud_updated[cid] = c_updated
                                 now_str = datetime.datetime.now().strftime("%H:%M:%S")
-                                print(f"[{now_str}] 🔔 提示：{cinfo['author']} 在雲端更新了《{cid}》（雲端較新，可由瀏覽器或本機確認）")
+                                print(f"[{now_str}] 🔔 提示：{c_author} 在雲端更新了《{cid}》（雲端較新，可由瀏覽器確認）")
                 except Exception:
                     pass
 
